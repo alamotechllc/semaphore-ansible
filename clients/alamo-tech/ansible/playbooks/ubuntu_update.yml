@@ -8,8 +8,12 @@
     deployment_type: "ubuntu-update"
     
   tasks:
+    - name: Get repository root directory
+      shell: pwd
+      register: repo_root
+      
     - name: Load client configuration
-      include_vars: "../../../{{ client_dir }}/env/targets.env"
+      include_vars: "{{ repo_root.stdout }}/{{ client_dir }}/env/targets.env"
       
     - name: Display deployment information
       debug:
@@ -19,10 +23,6 @@
           - "SSH User: {{ USER }}"
           - "Deployment Type: {{ deployment_type }}"
           
-    - name: Get repository root directory
-      shell: pwd
-      register: repo_root
-      
     - name: Run Ubuntu update deployment
       shell: |
         cd "{{ repo_root.stdout }}"
