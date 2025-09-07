@@ -1,0 +1,44 @@
+---
+- name: Ubuntu Server Update for Alamo Tech
+  hosts: localhost
+  gather_facts: false
+  vars:
+    client: "alamo-tech"
+    client_dir: "clients/{{ client }}"
+    deployment_type: "ubuntu-update"
+    
+  tasks:
+    - name: Load client configuration
+      include_vars: "{{ client_dir }}/env/targets.env"
+      
+    - name: Display deployment information
+      debug:
+        msg:
+          - "Client: {{ client }}"
+          - "Target Host: {{ HOST }}"
+          - "SSH User: {{ USER }}"
+          - "Deployment Type: {{ deployment_type }}"
+          
+    - name: Run Ubuntu update deployment
+      shell: |
+        ./shared/scripts/ubuntu_update.sh \
+          --client "{{ client }}" \
+          --client-dir "{{ client_dir }}" \
+          --ssh-key "$SEMAPHORE_SECRET_DIR/ssh_key" \
+          --host "{{ HOST }}" \
+          --user "{{ USER }}" \
+          --update-type "{{ UBUNTU_UPDATE_TYPE | default('standard') }}"
+      register: update_result
+      
+    - name: Display update results
+      debug:
+        var: update_result.stdout_lines
+        
+    - name: Check for update errors
+      fail:
+        msg: "Ubuntu update failed"
+      when: update_result.rc != 0
+      
+    - name: Update completed successfully
+      debug:
+        msg: "Ubuntu update completed successfully for {{ client }}"
