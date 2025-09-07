@@ -30,9 +30,26 @@
           - "SSH User: {{ USER }}"
           - "Deployment Type: {{ deployment_type }}"
           
+    - name: Check if script exists
+      shell: ls -la /tmp/semaphore/project_5/repository_3_template_3/shared/scripts/ubuntu_update.sh
+      register: script_check
+      
+    - name: Debug script check
+      debug:
+        var: script_check.stdout_lines
+        
+    - name: Check script permissions
+      shell: ls -la /tmp/semaphore/project_5/repository_3_template_3/shared/scripts/
+      register: script_perms
+      
+    - name: Debug script permissions
+      debug:
+        var: script_perms.stdout_lines
+        
     - name: Run Ubuntu update deployment
       shell: |
         cd /tmp/semaphore/project_5/repository_3_template_3
+        chmod +x ./shared/scripts/ubuntu_update.sh
         ./shared/scripts/ubuntu_update.sh \
           --client "{{ client }}" \
           --client-dir "{{ client_dir }}" \
