@@ -8,8 +8,25 @@
     deployment_type: "ubuntu-update"
     
   tasks:
+    - name: List directory contents to debug
+      shell: ls -la /tmp/semaphore/project_5/repository_3_template_3/
+      register: dir_list
+      
+    - name: Debug directory contents
+      debug:
+        var: dir_list.stdout_lines
+        
+    - name: Check if targets.env exists
+      shell: find /tmp/semaphore/project_5/repository_3_template_3/ -name "targets.env" -type f
+      register: targets_file
+      
+    - name: Debug targets.env location
+      debug:
+        var: targets_file.stdout_lines
+        
     - name: Load client configuration
-      include_vars: "/tmp/semaphore/project_5/repository_3_template_3/{{ client_dir }}/env/targets.env"
+      include_vars: "{{ targets_file.stdout_lines[0] }}"
+      when: targets_file.stdout_lines | length > 0
       
     - name: Display deployment information
       debug:
