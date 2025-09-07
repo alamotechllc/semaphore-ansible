@@ -51,3 +51,7 @@ secrets:
     files:
       - path: ssh_key
         content: encrypted
+  - name: alamo-vars
+    files:
+      - path: ssh_key
+        content: encrypted
