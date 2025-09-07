@@ -1,0 +1,23 @@
+---
+- name: Test Azure Connection for Kiker CPA
+  hosts: localhost
+  gather_facts: false
+  vars:
+    location: "centralus"
+    
+  tasks:
+    - name: Test Azure authentication
+      azure_rm_resourcegroup_info:
+        name: "kiker-cpa-rg"
+      register: rg_info
+      ignore_errors: yes
+
+    - name: Display connection status
+      debug:
+        msg: "Azure connection successful! Found {{ rg_info.resourcegroups | length }} resource groups"
+      when: rg_info.resourcegroups is defined
+
+    - name: Display connection error
+      debug:
+        msg: "Azure connection failed: {{ rg_info.msg }}"
+      when: rg_info.failed is defined

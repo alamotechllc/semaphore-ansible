@@ -1,0 +1,20 @@
+---
+- name: Ensure resource group
+  azure.azcollection.azure_rm_resourcegroup:
+    name: "{{ rg_name }}"
+    location: "{{ azure_location }}"
+
+- name: Ensure virtual network
+  azure.azcollection.azure_rm_virtualnetwork:
+    resource_group: "{{ rg_name }}"
+    name: "{{ vnet_name }}"
+    address_prefixes: ["{{ address_space }}"]
+
+- name: Ensure subnets
+  loop: "{{ subnets }}"
+  loop_control: { label: "{{ item.name }}" }
+  azure.azcollection.azure_rm_subnet:
+    resource_group: "{{ rg_name }}"
+    name: "{{ item.name }}"
+    address_prefix: "{{ item.prefix }}"
+    virtual_network_name: "{{ vnet_name }}"

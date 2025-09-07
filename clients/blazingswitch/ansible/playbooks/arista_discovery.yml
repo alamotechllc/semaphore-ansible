@@ -1,0 +1,372 @@
+---
+- name: BlazingSwitch - Arista Network Discovery
+  hosts: arista_core
+  gather_facts: false
+  tags:
+    - discovery
+    - arista
+    - network
+  
+  vars:
+    discovery_output_dir: "{{ output_config.discovery_results }}/arista"
+    timestamp: "{{ ansible_date_time.iso8601 }}"
+  
+  pre_tasks:
+    - name: Create discovery output directory
+      file:
+        path: "{{ discovery_output_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+    
+    - name: Set fact for discovery timestamp
+      set_fact:
+        discovery_timestamp: "{{ timestamp }}"
+    
+    - name: Display discovery start message
+      debug:
+        msg: "Starting Arista network discovery for {{ inventory_hostname }} at {{ discovery_timestamp }}"
+  
+  tasks:
+    - name: Gather Arista facts
+      arista.eos.eos_facts:
+        gather_subset:
+          - hardware
+          - interfaces
+          - default
+      register: arista_facts
+      tags:
+        - facts
+        - discovery
+    
+    - name: Get running configuration
+      arista.eos.eos_config:
+        retrieve: running
+      register: running_config
+      tags:
+        - config
+        - discovery
+    
+    - name: Get startup configuration
+      arista.eos.eos_config:
+        retrieve: startup
+      register: startup_config
+      tags:
+        - config
+        - discovery
+    
+    - name: Get interface information
+      arista.eos.eos_interfaces:
+        gather_subset:
+          - interfaces
+          - counters
+      register: interface_info
+      tags:
+        - interfaces
+        - discovery
+    
+    - name: Get BGP information
+      arista.eos.eos_bgp:
+        gather_subset:
+          - neighbors
+          - address_family
+      register: bgp_info
+      tags:
+        - bgp
+        - discovery
+    
+    - name: Get routing information
+      arista.eos.eos_routing:
+        gather_subset:
+          - ospf
+          - static_routes
+      register: routing_info
+      tags:
+        - routing
+        - discovery
+    
+    - name: Get VLAN information
+      arista.eos.eos_vlans:
+        gather_subset:
+          - interfaces
+          - vlan_interfaces
+      register: vlan_info
+      tags:
+        - vlans
+        - discovery
+    
+    - name: Get system information
+      arista.eos.eos_system:
+        gather_subset:
+          - hostname
+          - domain_name
+          - name_servers
+          - ntp_servers
+      register: system_info
+      tags:
+        - system
+        - discovery
+    
+    - name: Get SNMP information
+      arista.eos.eos_snmp:
+        gather_subset:
+          - communities
+          - contact
+          - location
+      register: snmp_info
+      tags:
+        - snmp
+        - discovery
+    
+    - name: Get access list information
+      arista.eos.eos_acls:
+        gather_subset:
+          - standard
+          - extended
+      register: acl_info
+      tags:
+        - acls
+        - discovery
+    
+    - name: Get logging information
+      arista.eos.eos_logging:
+        gather_subset:
+          - console
+          - hosts
+          - monitor
+      register: logging_info
+      tags:
+        - logging
+        - discovery
+    
+    - name: Get NTP information
+      arista.eos.eos_ntp:
+        gather_subset:
+          - servers
+          - authentication
+      register: ntp_info
+      tags:
+        - ntp
+        - discovery
+    
+    - name: Get user account information
+      arista.eos.eos_users:
+        gather_subset:
+          - users
+      register: user_info
+      tags:
+        - users
+        - discovery
+    
+    - name: Get version information
+      arista.eos.eos_command:
+        commands:
+          - show version
+          - show inventory
+          - show processes cpu
+          - show memory statistics
+          - show environment
+      register: version_info
+      tags:
+        - version
+        - discovery
+    
+    - name: Get interface statistics
+      arista.eos.eos_command:
+        commands:
+          - show interfaces counters
+          - show interfaces status
+          - show interfaces description
+      register: interface_stats
+      tags:
+        - statistics
+        - discovery
+    
+    - name: Get BGP summary
+      arista.eos.eos_command:
+        commands:
+          - show ip bgp summary
+          - show ip bgp neighbors
+          - show ip route bgp
+      register: bgp_summary
+      tags:
+        - bgp
+        - discovery
+    
+    - name: Get OSPF information
+      arista.eos.eos_command:
+        commands:
+          - show ip ospf neighbor
+          - show ip ospf database
+          - show ip route ospf
+      register: ospf_info
+      tags:
+        - ospf
+        - discovery
+    
+    - name: Get spanning tree information
+      arista.eos.eos_command:
+        commands:
+          - show spanning-tree
+          - show spanning-tree root
+      register: spanning_tree_info
+      tags:
+        - spanning-tree
+        - discovery
+    
+    - name: Get QoS information
+      arista.eos.eos_command:
+        commands:
+          - show qos
+          - show policy-map
+      register: qos_info
+      tags:
+        - qos
+        - discovery
+    
+    - name: Get security information
+      arista.eos.eos_command:
+        commands:
+          - show ip access-list
+          - show user-account
+          - show ssh
+      register: security_info
+      tags:
+        - security
+        - discovery
+    
+    - name: Compile discovery report
+      set_fact:
+        discovery_report:
+          hostname: "{{ inventory_hostname }}"
+          timestamp: "{{ discovery_timestamp }}"
+          facts: "{{ arista_facts }}"
+          running_config: "{{ running_config }}"
+          startup_config: "{{ startup_config }}"
+          interfaces: "{{ interface_info }}"
+          bgp: "{{ bgp_info }}"
+          routing: "{{ routing_info }}"
+          vlans: "{{ vlan_info }}"
+          system: "{{ system_info }}"
+          snmp: "{{ snmp_info }}"
+          acls: "{{ acl_info }}"
+          logging: "{{ logging_info }}"
+          ntp: "{{ ntp_info }}"
+          users: "{{ user_info }}"
+          version: "{{ version_info }}"
+          interface_stats: "{{ interface_stats }}"
+          bgp_summary: "{{ bgp_summary }}"
+          ospf: "{{ ospf_info }}"
+          spanning_tree: "{{ spanning_tree_info }}"
+          qos: "{{ qos_info }}"
+          security: "{{ security_info }}"
+      tags:
+        - report
+        - discovery
+    
+    - name: Save discovery report to JSON file
+      copy:
+        content: "{{ discovery_report | to_nice_json }}"
+        dest: "{{ discovery_output_dir }}/{{ inventory_hostname }}_discovery_{{ discovery_timestamp }}.json"
+      delegate_to: localhost
+      tags:
+        - output
+        - discovery
+    
+    - name: Save running configuration
+      copy:
+        content: "{{ running_config.running_config }}"
+        dest: "{{ discovery_output_dir }}/{{ inventory_hostname }}_running_config_{{ discovery_timestamp }}.cfg"
+      delegate_to: localhost
+      tags:
+        - output
+        - discovery
+    
+    - name: Save startup configuration
+      copy:
+        content: "{{ startup_config.startup_config }}"
+        dest: "{{ discovery_output_dir }}/{{ inventory_hostname }}_startup_config_{{ discovery_timestamp }}.cfg"
+      delegate_to: localhost
+      tags:
+        - output
+        - discovery
+    
+    - name: Generate discovery summary
+      set_fact:
+        discovery_summary:
+          hostname: "{{ inventory_hostname }}"
+          timestamp: "{{ discovery_timestamp }}"
+          os_version: "{{ arista_facts.ansible_net_version }}"
+          model: "{{ arista_facts.ansible_net_model }}"
+          serial: "{{ arista_facts.ansible_net_serialnum }}"
+          uptime: "{{ arista_facts.ansible_net_uptime }}"
+          interfaces_count: "{{ arista_facts.ansible_net_interfaces | length }}"
+          bgp_neighbors: "{{ bgp_info.bgp_neighbors | length if bgp_info.bgp_neighbors else 0 }}"
+          vlan_count: "{{ vlan_info.vlans | length if vlan_info.vlans else 0 }}"
+          status: "completed"
+      tags:
+        - summary
+        - discovery
+    
+    - name: Save discovery summary
+      copy:
+        content: "{{ discovery_summary | to_nice_json }}"
+        dest: "{{ discovery_output_dir }}/{{ inventory_hostname }}_summary_{{ discovery_timestamp }}.json"
+      delegate_to: localhost
+      tags:
+        - output
+        - discovery
+    
+    - name: Display discovery completion message
+      debug:
+        msg: "Arista discovery completed for {{ inventory_hostname }}. Results saved to {{ discovery_output_dir }}"
+      tags:
+        - completion
+        - discovery
+  
+  post_tasks:
+    - name: Create discovery index file
+      copy:
+        content: |
+          # BlazingSwitch Arista Discovery Results
+          # Generated: {{ discovery_timestamp }}
+          
+          ## Discovered Devices
+          {% for host in groups.arista_core %}
+          - {{ host }}: {{ discovery_output_dir }}/{{ host }}_summary_{{ discovery_timestamp }}.json
+          {% endfor %}
+          
+          ## Output Files
+          - Discovery Reports: `*_discovery_*.json`
+          - Running Configs: `*_running_config_*.cfg`
+          - Startup Configs: `*_startup_config_*.cfg`
+          - Summaries: `*_summary_*.json`
+          
+          ## Next Steps
+          1. Review discovery results
+          2. Validate network topology
+          3. Plan BGP cutover strategy
+          4. Execute cutover playbook
+        dest: "{{ discovery_output_dir }}/README.md"
+      delegate_to: localhost
+      run_once: true
+      tags:
+        - documentation
+        - discovery
+    
+    - name: Display final discovery summary
+      debug:
+        msg: |
+          ========================================
+          ARISTA DISCOVERY COMPLETED
+          ========================================
+          Timestamp: {{ discovery_timestamp }}
+          Devices Discovered: {{ groups.arista_core | length }}
+          Output Directory: {{ discovery_output_dir }}
+          Files Generated: {{ (discovery_output_dir | listdir) | length }}
+          ========================================
+      run_once: true
+      tags:
+        - completion
+        - discovery

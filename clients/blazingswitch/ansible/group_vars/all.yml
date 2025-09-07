@@ -1,0 +1,207 @@
+---
+# BlazingSwitch Global Variables
+# These variables apply to all hosts and groups
+
+# Ansible Configuration
+ansible_python_interpreter: /usr/bin/python3
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+ansible_ssh_extra_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+ansible_ssh_pipelining: true
+ansible_ssh_transfer_method: piped
+
+# Network Configuration
+network_config:
+  management_vlan: 100
+  data_vlan: 200
+  voice_vlan: 300
+  native_vlan: 1
+  
+  # IP Addressing
+  management_subnet: "192.168.100.0/24"
+  data_subnet: "10.0.0.0/16"
+  voice_subnet: "172.16.0.0/16"
+  
+  # Routing
+  ospf_area: 0
+  ospf_network_type: point-to-point
+  bgp_global_asn: 65000
+  
+  # QoS
+  qos_enabled: true
+  qos_policy: "blazingswitch-qos"
+  
+  # Security
+  acl_enabled: true
+  acl_name: "blazingswitch-acl"
+  ssh_version: 2
+  telnet_disabled: true
+
+# BGP Configuration
+bgp_config:
+  global_asn: 65000
+  route_reflector: true
+  route_reflector_clients:
+    - cisco_access
+    - extreme_distribution
+  
+  # BGP Timers
+  keepalive: 60
+  holdtime: 180
+  
+  # BGP Communities
+  communities:
+    local_preference: "65000:100"
+    no_export: "65000:65535"
+    no_advertise: "65000:65534"
+  
+  # Route Advertisement
+  advertise_networks:
+    - "10.0.0.0/16"
+    - "172.16.0.0/16"
+    - "192.168.100.0/24"
+
+# Cloud Provider Configuration
+cloud_config:
+  aws:
+    region: "{{ lookup('env', 'AWS_DEFAULT_REGION') | default('us-east-1') }}"
+    vpc_cidr: "10.0.0.0/16"
+    enable_vpc_peering: true
+    bgp_asn: 65099
+  
+  azure:
+    location: "{{ lookup('env', 'AZURE_LOCATION') | default('eastus') }}"
+    resource_group: "{{ lookup('env', 'AZURE_RESOURCE_GROUP') | default('blazingswitch-rg') }}"
+    vnet_cidr: "10.1.0.0/16"
+    enable_vnet_peering: true
+    bgp_asn: 65099
+  
+  gcp:
+    region: "{{ lookup('env', 'GCP_REGION') | default('us-central1') }}"
+    project_id: "{{ lookup('env', 'GCP_PROJECT_ID') | default('') }}"
+    vpc_cidr: "10.2.0.0/16"
+    enable_vpc_peering: true
+    bgp_asn: 65099
+
+# Output and Logging Configuration
+output_config:
+  base_directory: "/project_outputs/blazingswitch"
+  discovery_results: "{{ output_config.base_directory }}/discovery_results"
+  cutover_logs: "{{ output_config.base_directory }}/cutover_logs"
+  rollback_logs: "{{ output_config.base_directory }}/rollback_logs"
+  task_outputs: "{{ output_config.base_directory }}/task_outputs"
+  backup_configs: "{{ output_config.base_directory }}/backup_configs"
+  
+  # Logging
+  log_level: info
+  log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  log_file: "{{ output_config.base_directory }}/blazingswitch.log"
+  
+  # Backup Configuration
+  backup_enabled: true
+  backup_interval: daily
+  backup_retention: 30
+  backup_format: "{{ inventory_hostname }}_{{ ansible_date_time.iso8601 }}.cfg"
+
+# Security Configuration
+security_config:
+  # SSH Configuration
+  ssh:
+    version: 2
+    key_exchange: "diffie-hellman-group14-sha256,diffie-hellman-group16-sha512"
+    cipher: "aes128-ctr,aes192-ctr,aes256-ctr"
+    mac: "hmac-sha2-256,hmac-sha2-512"
+    kex_algorithms: "diffie-hellman-group14-sha256,diffie-hellman-group16-sha512"
+  
+  # Access Control
+  access_lists:
+    - name: "blazingswitch-management"
+      entries:
+        - "permit ip 192.168.100.0 0.0.0.255 any"
+        - "deny ip any any log"
+  
+  # Authentication
+  authentication:
+    local_users: true
+    radius_enabled: false
+    tacacs_enabled: false
+    console_timeout: 10
+    vty_timeout: 10
+
+# Monitoring and Alerting
+monitoring_config:
+  snmp:
+    enabled: true
+    community: "{{ lookup('env', 'SNMP_COMMUNITY') | default('blazingswitch') }}"
+    location: "{{ lookup('env', 'SNMP_LOCATION') | default('Primary Data Center') }}"
+    contact: "{{ lookup('env', 'SNMP_CONTACT') | default('network-team@company.com') }}"
+  
+  syslog:
+    enabled: true
+    servers:
+      - "192.168.100.100"
+      - "192.168.100.101"
+    facility: local7
+    level: informational
+  
+  netflow:
+    enabled: true
+    collectors:
+      - "192.168.100.200:9995"
+    template_timeout: 1800
+
+# Performance Configuration
+performance_config:
+  # Interface Configuration
+  interface:
+    auto_negotiation: true
+    flow_control: true
+    spanning_tree: true
+    spanning_tree_mode: rapid-pvst
+  
+  # Buffer and Queue Configuration
+  buffers:
+    rx_buffer_size: 4096
+    tx_buffer_size: 4096
+    queue_depth: 1000
+  
+  # CPU Protection
+  cpu_protection:
+    enabled: true
+    threshold: 80
+    action: drop
+
+# Vendor-Specific Variables
+vendor_vars:
+  arista:
+    eos_version: "4.28.0F"
+    api_enabled: true
+    api_http: true
+    api_https: true
+    api_localhost: true
+  
+  cisco:
+    ios_version: "15.2"
+    enable_secret: "{{ lookup('env', 'CISCO_ENABLE_SECRET') | default('') }}"
+    vty_access: true
+  
+  extreme:
+    exos_version: "31.1.1.4"
+    ssh_enabled: true
+    telnet_disabled: true
+
+# Environment Variables (for lookups)
+env_vars:
+  # Network Device Credentials
+  arista_username: "{{ lookup('env', 'ARISTA_USERNAME') | default('admin') }}"
+  arista_password: "{{ lookup('env', 'ARISTA_PASSWORD') | default('') }}"
+  cisco_username: "{{ lookup('env', 'CISCO_USERNAME') | default('admin') }}"
+  cisco_password: "{{ lookup('env', 'CISCO_PASSWORD') | default('') }}"
+  extreme_username: "{{ lookup('env', 'EXTREME_USERNAME') | default('admin') }}"
+  extreme_password: "{{ lookup('env', 'EXTREME_PASSWORD') | default('') }}"
+  
+  # Cloud Provider Credentials
+  aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') | default('') }}"
+  aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') | default('') }}"
+  azure_client_id: "{{ lookup('env', 'AZURE_CLIENT_ID') | default('') }}"
+  azure_client_secret: "{{ lookup('env', 'AZURE_CLIENT_SECRET') | default('') }}"
+  gcp_service_account_key: "{{ lookup('env', 'GCP_SERVICE_ACCOUNT_KEY') | default('') }}"

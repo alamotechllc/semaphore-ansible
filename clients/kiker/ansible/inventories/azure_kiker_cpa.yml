@@ -1,0 +1,21 @@
+---
+plugin: azure_rm
+auth_source: cli
+subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
+
+# Group by resource groups
+keyed_groups:
+  - key: resource_group
+    prefix: rg
+  - key: location
+    prefix: location
+  - key: tags.Environment
+    prefix: env
+  - key: tags.Project
+    prefix: project
+
+# Host variables
+hostvars:
+  ansible_connection: ssh
+  ansible_user: azureuser
+  ansible_python_interpreter: /usr/bin/python3

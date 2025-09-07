@@ -1,0 +1,239 @@
+---
+- name: Provision Windows Server VM for Kiker CPA (RDS Ready)
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # Resource naming (following your PowerShell convention)
+    resource_group: "rg-rds01-kiker-prod"
+    location: "centralus"
+    
+    # VM Configuration
+    vm_name: "vm-rds01-kiker-prod"
+    vm_size: "Standard_D4as_v5"  # Same as your PowerShell script
+    admin_username: "azureadmin"
+    
+    # Network Configuration
+    vnet_name: "vnet-rds01-kiker-prod"
+    vnet_prefix: "10.0.0.0/16"
+    workload_subnet_name: "snet-rds01-kiker-prod"
+    workload_subnet_prefix: "10.0.0.0/24"
+    bastion_subnet_name: "AzureBastionSubnet"
+    bastion_subnet_prefix: "10.0.1.0/27"
+    
+    # Security
+    nsg_name: "nsg-rds01-kiker-prod"
+    nic_name: "nic-rds01-kiker-prod"
+    
+    # Access Mode
+    public_access_mode: "Bastion"  # Bastion, PublicIP, or None
+    allowed_admin_cidr: "{{ lookup('env', 'ALLOWED_ADMIN_CIDR') | default('') }}"
+    
+  tasks:
+    - name: Verify Azure CLI authentication
+      azure_rm_resourcegroup_info:
+        name: "{{ resource_group }}"
+      register: rg_check
+      ignore_errors: yes
+
+    - name: Display Azure connection status
+      debug:
+        msg: "Azure CLI authentication successful"
+      when: rg_check.resourcegroups is defined
+
+    - name: Create resource group
+      azure_rm_resourcegroup:
+        name: "{{ resource_group }}"
+        location: "{{ location }}"
+        state: present
+
+    - name: Create virtual network
+      azure_rm_virtualnetwork:
+        resource_group: "{{ resource_group }}"
+        name: "{{ vnet_name }}"
+        address_prefixes: "{{ vnet_prefix }}"
+        subnets:
+          - name: "{{ workload_subnet_name }}"
+            address_prefix: "{{ workload_subnet_prefix }}"
+        state: present
+
+    - name: Add Bastion subnet if using Bastion access
+      azure_rm_virtualnetwork:
+        resource_group: "{{ resource_group }}"
+        name: "{{ vnet_name }}"
+        subnets:
+          - name: "{{ workload_subnet_name }}"
+            address_prefix: "{{ workload_subnet_prefix }}"
+          - name: "{{ bastion_subnet_name }}"
+            address_prefix: "{{ bastion_subnet_prefix }}"
+        state: present
+      when: public_access_mode == "Bastion"
+
+    - name: Create network security group
+      azure_rm_securitygroup:
+        resource_group: "{{ resource_group }}"
+        name: "{{ nsg_name }}"
+        rules:
+          # RDP from Virtual Network (same as your PowerShell)
+          - name: "Allow-RDP-IntraVnet"
+            protocol: Tcp
+            destination_port_range: 3389
+            access: Allow
+            priority: 1100
+            direction: Inbound
+            source_address_prefix: "VirtualNetwork"
+          # Optional: RDP from specific CIDR if PublicIP mode
+          - name: "Allow-RDP-AdminCIDR"
+            protocol: Tcp
+            destination_port_range: 3389
+            access: Allow
+            priority: 1010
+            direction: Inbound
+            source_address_prefix: "{{ allowed_admin_cidr }}"
+            state: present
+        state: present
+      when: public_access_mode == "PublicIP" and allowed_admin_cidr != ""
+
+    - name: Create network security group (Bastion mode)
+      azure_rm_securitygroup:
+        resource_group: "{{ resource_group }}"
+        name: "{{ nsg_name }}"
+        rules:
+          - name: "Allow-RDP-IntraVnet"
+            protocol: Tcp
+            destination_port_range: 3389
+            access: Allow
+            priority: 1100
+            direction: Inbound
+            source_address_prefix: "VirtualNetwork"
+        state: present
+      when: public_access_mode == "Bastion"
+
+    - name: Create network security group (None mode)
+      azure_rm_securitygroup:
+        resource_group: "{{ resource_group }}"
+        name: "{{ nsg_name }}"
+        rules:
+          - name: "Allow-RDP-IntraVnet"
+            protocol: Tcp
+            destination_port_range: 3389
+            access: Allow
+            priority: 1100
+            direction: Inbound
+            source_address_prefix: "VirtualNetwork"
+        state: present
+      when: public_access_mode == "None"
+
+    - name: Attach NSG to workload subnet
+      azure_rm_virtualnetwork:
+        resource_group: "{{ resource_group }}"
+        name: "{{ vnet_name }}"
+        subnets:
+          - name: "{{ workload_subnet_name }}"
+            address_prefix: "{{ workload_subnet_prefix }}"
+            security_group: "{{ nsg_name }}"
+          - name: "{{ bastion_subnet_name }}"
+            address_prefix: "{{ bastion_subnet_prefix }}"
+            state: present
+        state: present
+      when: public_access_mode == "Bastion"
+
+    - name: Attach NSG to workload subnet (no Bastion)
+      azure_rm_virtualnetwork:
+        resource_group: "{{ resource_group }}"
+        name: "{{ vnet_name }}"
+        subnets:
+          - name: "{{ workload_subnet_name }}"
+            address_prefix: "{{ workload_subnet_prefix }}"
+            security_group: "{{ nsg_name }}"
+        state: present
+      when: public_access_mode != "Bastion"
+
+    - name: Create public IP for VM (PublicIP mode)
+      azure_rm_publicipaddress:
+        resource_group: "{{ resource_group }}"
+        name: "pip-rds01-kiker-prod"
+        allocation_method: Static
+        sku: Standard
+        state: present
+      when: public_access_mode == "PublicIP"
+      register: vm_pip
+
+    - name: Create network interface
+      azure_rm_networkinterface:
+        resource_group: "{{ resource_group }}"
+        name: "{{ nic_name }}"
+        virtual_network: "{{ vnet_name }}"
+        subnet: "{{ workload_subnet_name }}"
+        security_group: "{{ nsg_name }}"
+        ip_configurations:
+          - name: "ipconfig1"
+            primary: yes
+            public_ip_address_name: "{{ vm_pip.name | default(omit) }}"
+        state: present
+      register: nic
+
+    - name: Create Windows Server 2022 VM
+      azure_rm_virtualmachine:
+        resource_group: "{{ resource_group }}"
+        name: "{{ vm_name }}"
+        vm_size: "{{ vm_size }}"
+        admin_username: "{{ admin_username }}"
+        admin_password: "{{ lookup('env', 'VM_ADMIN_PASSWORD') }}"
+        image:
+          offer: WindowsServer
+          publisher: MicrosoftWindowsServer
+          sku: 2022-datacenter
+          version: latest
+        network_interfaces: "{{ nic.name }}"
+        os_disk_size_gb: 128
+        managed_disk_type: Premium_LRS
+        state: present
+
+    - name: Create Bastion public IP
+      azure_rm_publicipaddress:
+        resource_group: "{{ resource_group }}"
+        name: "pip-bas-rds01-kiker-prod"
+        allocation_method: Static
+        sku: Standard
+        state: present
+      when: public_access_mode == "Bastion"
+      register: bastion_pip
+
+    - name: Create Azure Bastion
+      azure_rm_bastion:
+        resource_group: "{{ resource_group }}"
+        name: "bas-rds01-kiker-prod"
+        virtual_network: "{{ vnet_name }}"
+        public_ip_address: "{{ bastion_pip.name }}"
+        sku: Standard
+        state: present
+      when: public_access_mode == "Bastion"
+
+    - name: Display VM information
+      debug:
+        msg: |
+          ✅ Windows Server VM '{{ vm_name }}' created successfully!
+          
+          Resource Group: {{ resource_group }}
+          Location: {{ location }}
+          VM Size: {{ vm_size }}
+          Admin Username: {{ admin_username }}
+          
+          Network:
+          - VNet: {{ vnet_name }}
+          - Subnet: {{ workload_subnet_name }}
+          - NSG: {{ nsg_name }}
+          - NIC: {{ nic.name }}
+          
+          Access:
+          - Mode: {{ public_access_mode }}
+          {% if public_access_mode == "Bastion" %}
+          - Bastion: bas-rds01-kiker-prod
+          {% elif public_access_mode == "PublicIP" %}
+          - Public IP: {{ vm_pip.ip_address | default("Creating...") }}
+          {% endif %}
+          
+          Next Steps:
+          1. Wait for VM to finish provisioning
+          2. Connect via RDP (Bastion or Public IP)
+          3. Install RDS roles and configure

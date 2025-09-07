@@ -1,0 +1,480 @@
+---
+- name: BlazingSwitch - BGP Cutover from Static Routes
+  hosts: bgp_peers
+  gather_facts: false
+  tags:
+    - cutover
+    - bgp
+    - migration
+  
+  vars:
+    cutover_output_dir: "{{ output_config.cutover_logs }}"
+    timestamp: "{{ ansible_date_time.iso8601 }}"
+    backup_enabled: "{{ backup_configs | default(true) }}"
+    dry_run: "{{ dry_run | default(false) }}"
+  
+  pre_tasks:
+    - name: Create cutover output directory
+      file:
+        path: "{{ cutover_output_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+    
+    - name: Set fact for cutover timestamp
+      set_fact:
+        cutover_timestamp: "{{ timestamp }}"
+    
+    - name: Display cutover start message
+      debug:
+        msg: "Starting BGP cutover for {{ inventory_hostname }} at {{ cutover_timestamp }}"
+    
+    - name: Validate pre-cutover requirements
+      block:
+        - name: Check if device is reachable
+          ping:
+            host: "{{ ansible_host }}"
+            count: 3
+          register: ping_result
+          failed_when: ping_result.packet_loss > 0
+        
+        - name: Verify SSH connectivity
+          wait_for:
+            host: "{{ ansible_host }}"
+            port: 22
+            timeout: 30
+          register: ssh_check
+        
+        - name: Check device role and BGP ASN
+          assert:
+            that:
+              - device_type is defined
+              - bgp_asn is defined
+              - role is defined
+            fail_msg: "Missing required device information: device_type, bgp_asn, or role"
+    
+    - name: Backup current configuration
+      block:
+        - name: Get current running configuration
+          arista.eos.eos_config:
+            retrieve: running
+          register: current_config
+          when: device_type == "arista_eos"
+        
+        - name: Get current running configuration (Cisco)
+          cisco.ios.ios_config:
+            retrieve: running
+          register: current_config
+          when: device_type == "cisco_ios"
+        
+        - name: Get current running configuration (Extreme)
+          extreme.exos.exos_config:
+            retrieve: running
+          register: current_config
+          when: device_type == "extreme_exos"
+        
+        - name: Save backup configuration
+          copy:
+            content: "{{ current_config.running_config }}"
+            dest: "{{ cutover_output_dir }}/{{ inventory_hostname }}_pre_cutover_{{ cutover_timestamp }}.cfg"
+          delegate_to: localhost
+          when: backup_enabled
+      when: backup_enabled
+  
+  tasks:
+    - name: Pre-flight BGP configuration check
+      block:
+        - name: Check current BGP status
+          arista.eos.eos_command:
+            commands:
+              - show ip bgp summary
+              - show ip bgp neighbors
+          register: bgp_status
+          when: device_type == "arista_eos"
+        
+        - name: Check current BGP status (Cisco)
+          cisco.ios.ios_command:
+            commands:
+              - show ip bgp summary
+              - show ip bgp neighbors
+          register: bgp_status
+          when: device_type == "cisco_ios"
+        
+        - name: Check current BGP status (Extreme)
+          extreme.exos.exos_command:
+            commands:
+              - show ip bgp summary
+              - show ip bgp neighbors
+          register: bgp_status
+          when: device_type == "extreme_exos"
+        
+        - name: Validate BGP status
+          assert:
+            that:
+              - bgp_status is defined
+              - bgp_status.stdout is defined
+            fail_msg: "Failed to retrieve BGP status"
+    
+    - name: Configure BGP routing (Arista)
+      block:
+        - name: Configure BGP router ID
+          arista.eos.eos_bgp:
+            config:
+              bgp_as: "{{ bgp_asn }}"
+              router_id: "{{ ansible_host }}"
+            state: present
+        
+        - name: Configure BGP neighbors
+          arista.eos.eos_bgp:
+            config:
+              bgp_as: "{{ bgp_asn }}"
+              neighbors:
+                - neighbor: "{{ item.ansible_host }}"
+                  remote_as: "{{ item.bgp_asn }}"
+                  description: "BGP peer to {{ item.inventory_hostname }}"
+            state: present
+          loop: "{{ groups.bgp_peers | map('extract', hostvars) | selectattr('inventory_hostname', 'ne', inventory_hostname) | list }}"
+        
+        - name: Configure BGP address family
+          arista.eos.eos_bgp:
+            config:
+              bgp_as: "{{ bgp_asn }}"
+              address_family:
+                - afi: ipv4
+                  safi: unicast
+                  networks:
+                    - network: "{{ item }}"
+                      route_map: "BLAZINGSWITCH-EXPORT"
+          loop: "{{ bgp_config.advertise_networks }}"
+        
+        - name: Configure route maps
+          arista.eos.eos_config:
+            lines:
+              - route-map BLAZINGSWITCH-EXPORT permit 10
+              - set community {{ bgp_config.communities.local_preference }}
+              - route-map BLAZINGSWITCH-IMPORT permit 10
+              - set local-preference 100
+      when: device_type == "arista_eos"
+      tags:
+        - bgp_config
+        - arista
+    
+    - name: Configure BGP routing (Cisco)
+      block:
+        - name: Configure BGP router ID
+          cisco.ios.ios_bgp:
+            config:
+              bgp_as: "{{ bgp_asn }}"
+              router_id: "{{ ansible_host }}"
+            state: present
+        
+        - name: Configure BGP neighbors
+          cisco.ios.ios_bgp:
+            config:
+              bgp_as: "{{ bgp_asn }}"
+              neighbors:
+                - neighbor: "{{ item.ansible_host }}"
+                  remote_as: "{{ item.bgp_asn }}"
+                  description: "BGP peer to {{ item.inventory_hostname }}"
+            state: present
+          loop: "{{ groups.bgp_peers | map('extract', hostvars) | selectattr('inventory_hostname', 'ne', inventory_hostname) | list }}"
+        
+        - name: Configure BGP address family
+          cisco.ios.ios_bgp:
+            config:
+              bgp_as: "{{ bgp_asn }}"
+              address_family:
+                - afi: ipv4
+                  safi: unicast
+                  networks:
+                    - network: "{{ item }}"
+                      route_map: "BLAZINGSWITCH-EXPORT"
+          loop: "{{ bgp_config.advertise_networks }}"
+        
+        - name: Configure route maps
+          cisco.ios.ios_config:
+            lines:
+              - route-map BLAZINGSWITCH-EXPORT permit 10
+              - set community {{ bgp_config.communities.local_preference }}
+              - route-map BLAZINGSWITCH-IMPORT permit 10
+              - set local-preference 100
+      when: device_type == "cisco_ios"
+      tags:
+        - bgp_config
+        - cisco
+    
+    - name: Configure BGP routing (Extreme)
+      block:
+        - name: Configure BGP router ID
+          extreme.exos.exos_bgp:
+            config:
+              bgp_as: "{{ bgp_asn }}"
+              router_id: "{{ ansible_host }}"
+            state: present
+        
+        - name: Configure BGP neighbors
+          extreme.exos.exos_bgp:
+            config:
+              bgp_as: "{{ bgp_asn }}"
+              neighbors:
+                - neighbor: "{{ item.ansible_host }}"
+                  remote_as: "{{ item.bgp_asn }}"
+                  description: "BGP peer to {{ item.inventory_hostname }}"
+            state: present
+          loop: "{{ groups.bgp_peers | map('extract', hostvars) | selectattr('inventory_hostname', 'ne', inventory_hostname) | list }}"
+        
+        - name: Configure BGP address family
+          extreme.exos.exos_bgp:
+            config:
+              bgp_as: "{{ bgp_asn }}"
+              address_family:
+                - afi: ipv4
+                  safi: unicast
+                  networks:
+                    - network: "{{ item }}"
+                      route_map: "BLAZINGSWITCH-EXPORT"
+          loop: "{{ bgp_config.advertise_networks }}"
+        
+        - name: Configure route maps
+          extreme.exos.exos_config:
+            lines:
+              - route-map BLAZINGSWITCH-EXPORT permit 10
+              - set community {{ bgp_config.communities.local_preference }}
+              - route-map BLAZINGSWITCH-IMPORT permit 10
+              - set local-preference 100
+      when: device_type == "extreme_exos"
+      tags:
+        - bgp_config
+        - extreme
+    
+    - name: Remove static routes (Arista)
+      block:
+        - name: Get current static routes
+          arista.eos.eos_command:
+            commands:
+              - show ip route static
+          register: static_routes
+        
+        - name: Remove static routes
+          arista.eos.eos_config:
+            lines:
+              - no ip route {{ item.network }} {{ item.mask }} {{ item.next_hop }}
+          loop: "{{ static_routes.stdout[0] | regex_findall('S\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+)/(\\d+)\\s+via\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+)') | map('combine', {'network': ansible_play_hosts[0], 'mask': ansible_play_hosts[1], 'next_hop': ansible_play_hosts[2]}) | list }}"
+          when: static_routes.stdout[0] | regex_search('S\\s+\\d+\\.\\d+\\.\\d+\\.\\d+/\\d+')
+      when: device_type == "arista_eos"
+      tags:
+        - static_removal
+        - arista
+    
+    - name: Remove static routes (Cisco)
+      block:
+        - name: Get current static routes
+          cisco.ios.ios_command:
+            commands:
+              - show ip route static
+          register: static_routes
+        
+        - name: Remove static routes
+          cisco.ios.ios_config:
+            lines:
+              - no ip route {{ item.network }} {{ item.mask }} {{ item.next_hop }}
+          loop: "{{ static_routes.stdout[0] | regex_findall('S\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+)/(\\d+)\\s+via\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+)') | map('combine', {'network': ansible_play_hosts[0], 'mask': ansible_play_hosts[1], 'next_hop': ansible_play_hosts[2]}) | list }}"
+          when: static_routes.stdout[0] | regex_search('S\\s+\\d+\\.\\d+\\.\\d+\\.\\d+/\\d+')
+      when: device_type == "cisco_ios"
+      tags:
+        - static_removal
+        - cisco
+    
+    - name: Remove static routes (Extreme)
+      block:
+        - name: Get current static routes
+          extreme.exos.exos_command:
+            commands:
+              - show ip route static
+          register: static_routes
+        
+        - name: Remove static routes
+          extreme.exos.exos_config:
+            lines:
+              - no ip route {{ item.network }} {{ item.mask }} {{ item.next_hop }}
+          loop: "{{ static_routes.stdout[0] | regex_findall('S\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+)/(\\d+)\\s+via\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+)') | map('combine', {'network': ansible_play_hosts[0], 'mask': ansible_play_hosts[1], 'next_hop': ansible_play_hosts[2]}) | list }}"
+          when: static_routes.stdout[0] | regex_search('S\\s+\\d+\\.\\d+\\.\\d+\\.\\d+/\\d+')
+      when: device_type == "extreme_exos"
+      tags:
+        - static_removal
+        - extreme
+    
+    - name: Verify BGP convergence
+      block:
+        - name: Wait for BGP to converge
+          wait_for:
+            timeout: 60
+        
+        - name: Check BGP neighbor status
+          arista.eos.eos_command:
+            commands:
+              - show ip bgp summary
+          register: bgp_summary
+          when: device_type == "arista_eos"
+        
+        - name: Check BGP neighbor status (Cisco)
+          cisco.ios.ios_command:
+            commands:
+              - show ip bgp summary
+          register: bgp_summary
+          when: device_type == "cisco_ios"
+        
+        - name: Check BGP neighbor status (Extreme)
+          extreme.exos.exos_command:
+            commands:
+              - show ip bgp summary
+          register: bgp_summary
+          when: device_type == "extreme_exos"
+        
+        - name: Validate BGP convergence
+          assert:
+            that:
+              - bgp_summary.stdout[0] | regex_search('Established')
+            fail_msg: "BGP neighbors not established"
+    
+    - name: Verify routing table
+      block:
+        - name: Check routing table
+          arista.eos.eos_command:
+            commands:
+              - show ip route
+          register: routing_table
+          when: device_type == "arista_eos"
+        
+        - name: Check routing table (Cisco)
+          cisco.ios.ios_command:
+            commands:
+              - show ip route
+          register: routing_table
+          when: device_type == "cisco_ios"
+        
+        - name: Check routing table (Extreme)
+          extreme.exos.exos_command:
+            commands:
+              - show ip route
+          register: routing_table
+          when: device_type == "extreme_exos"
+        
+        - name: Validate routing table
+          assert:
+            that:
+              - routing_table.stdout[0] | regex_search('B\\s+\\d+\\.\\d+\\.\\d+\\.\\d+/\\d+')
+            fail_msg: "No BGP routes found in routing table"
+    
+    - name: Save post-cutover configuration
+      block:
+        - name: Get post-cutover configuration
+          arista.eos.eos_config:
+            retrieve: running
+          register: post_config
+          when: device_type == "arista_eos"
+        
+        - name: Get post-cutover configuration (Cisco)
+          cisco.ios.ios_config:
+            retrieve: running
+          register: post_config
+          when: device_type == "cisco_ios"
+        
+        - name: Get post-cutover configuration (Extreme)
+          extreme.exos.exos_config:
+            retrieve: running
+          register: post_config
+          when: device_type == "extreme_exos"
+        
+        - name: Save post-cutover configuration
+          copy:
+            content: "{{ post_config.running_config }}"
+            dest: "{{ cutover_output_dir }}/{{ inventory_hostname }}_post_cutover_{{ cutover_timestamp }}.cfg"
+          delegate_to: localhost
+    
+    - name: Generate cutover report
+      set_fact:
+        cutover_report:
+          hostname: "{{ inventory_hostname }}"
+          timestamp: "{{ cutover_timestamp }}"
+          device_type: "{{ device_type }}"
+          bgp_asn: "{{ bgp_asn }}"
+          role: "{{ role }}"
+          pre_config: "{{ current_config.running_config if current_config is defined else 'N/A' }}"
+          post_config: "{{ post_config.running_config if post_config is defined else 'N/A' }}"
+          bgp_status: "{{ bgp_summary.stdout[0] if bgp_summary is defined else 'N/A' }}"
+          routing_table: "{{ routing_table.stdout[0] if routing_table is defined else 'N/A' }}"
+          status: "completed"
+          dry_run: "{{ dry_run }}"
+    
+    - name: Save cutover report
+      copy:
+        content: "{{ cutover_report | to_nice_json }}"
+        dest: "{{ cutover_output_dir }}/{{ inventory_hostname }}_cutover_report_{{ cutover_timestamp }}.json"
+      delegate_to: localhost
+    
+    - name: Display cutover completion message
+      debug:
+        msg: "BGP cutover completed for {{ inventory_hostname }}. Report saved to {{ cutover_output_dir }}"
+  
+  post_tasks:
+    - name: Create cutover summary
+      set_fact:
+        cutover_summary:
+          timestamp: "{{ cutover_timestamp }}"
+          devices_processed: "{{ groups.bgp_peers | length }}"
+          successful_cutovers: "{{ groups.bgp_peers | length }}"
+          failed_cutovers: 0
+          output_directory: "{{ cutover_output_dir }}"
+          status: "completed"
+    
+    - name: Save cutover summary
+      copy:
+        content: "{{ cutover_summary | to_nice_json }}"
+        dest: "{{ cutover_output_dir }}/cutover_summary_{{ cutover_timestamp }}.json"
+      delegate_to: localhost
+      run_once: true
+    
+    - name: Create cutover index file
+      copy:
+        content: |
+          # BlazingSwitch BGP Cutover Results
+          # Generated: {{ cutover_timestamp }}
+          
+          ## Cutover Summary
+          - Timestamp: {{ cutover_timestamp }}
+          - Devices Processed: {{ groups.bgp_peers | length }}
+          - Status: Completed
+          
+          ## Device Reports
+          {% for host in groups.bgp_peers %}
+          - {{ host }}: {{ cutover_output_dir }}/{{ host }}_cutover_report_{{ cutover_timestamp }}.json
+          {% endfor %}
+          
+          ## Configuration Files
+          - Pre-cutover: `*_pre_cutover_*.cfg`
+          - Post-cutover: `*_post_cutover_*.cfg`
+          - Summary: `cutover_summary_{{ cutover_timestamp }}.json`
+          
+          ## Next Steps
+          1. Verify network connectivity
+          2. Monitor BGP convergence
+          3. Update documentation
+          4. Test failover scenarios
+        dest: "{{ cutover_output_dir }}/README.md"
+      delegate_to: localhost
+      run_once: true
+    
+    - name: Display final cutover summary
+      debug:
+        msg: |
+          ========================================
+          BGP CUTOVER COMPLETED
+          ========================================
+          Timestamp: {{ cutover_timestamp }}
+          Devices Processed: {{ groups.bgp_peers | length }}
+          Status: Completed Successfully
+          Output Directory: {{ cutover_output_dir }}
+          ========================================
+      run_once: true

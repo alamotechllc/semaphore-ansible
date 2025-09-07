@@ -1,0 +1,166 @@
+---
+all:
+  children:
+    # Network Device Groups
+    arista_core:
+      hosts:
+        arista-core-01:
+          ansible_host: 192.168.1.1
+          ansible_network_os: arista.eos.eos
+          ansible_connection: network_cli
+          ansible_user: "{{ lookup('env', 'ARISTA_USERNAME') | default('admin') }}"
+          ansible_password: "{{ lookup('env', 'ARISTA_PASSWORD') | default('') }}"
+          ansible_ssh_pass: "{{ lookup('env', 'ARISTA_PASSWORD') | default('') }}"
+          device_type: arista_eos
+          bgp_asn: 65001
+          role: core_router
+          site: primary_dc
+        arista-core-02:
+          ansible_host: 192.168.1.2
+          ansible_network_os: arista.eos.eos
+          ansible_connection: network_cli
+          ansible_user: "{{ lookup('env', 'ARISTA_USERNAME') | default('admin') }}"
+          ansible_password: "{{ lookup('env', 'ARISTA_PASSWORD') | default('') }}"
+          ansible_ssh_pass: "{{ lookup('env', 'ARISTA_PASSWORD') | default('') }}"
+          device_type: arista_eos
+          bgp_asn: 65001
+          role: core_router
+          site: primary_dc
+    
+    cisco_access:
+      hosts:
+        cisco-access-01:
+          ansible_host: 192.168.2.1
+          ansible_network_os: cisco.ios.ios
+          ansible_connection: network_cli
+          ansible_user: "{{ lookup('env', 'CISCO_USERNAME') | default('admin') }}"
+          ansible_password: "{{ lookup('env', 'CISCO_PASSWORD') | default('') }}"
+          ansible_ssh_pass: "{{ lookup('env', 'CISCO_PASSWORD') | default('') }}"
+          device_type: cisco_ios
+          bgp_asn: 65002
+          role: access_switch
+          site: primary_dc
+        cisco-access-02:
+          ansible_host: 192.168.2.2
+          ansible_network_os: cisco.ios.ios
+          ansible_connection: network_cli
+          ansible_user: "{{ lookup('env', 'CISCO_USERNAME') | default('admin') }}"
+          ansible_password: "{{ lookup('env', 'CISCO_PASSWORD') | default('') }}"
+          ansible_ssh_pass: "{{ lookup('env', 'CISCO_PASSWORD') | default('') }}"
+          device_type: cisco_ios
+          bgp_asn: 65002
+          role: access_switch
+          site: primary_dc
+    
+    extreme_distribution:
+      hosts:
+        extreme-dist-01:
+          ansible_host: 192.168.3.1
+          ansible_network_os: extreme.exos.exos
+          ansible_connection: network_cli
+          ansible_user: "{{ lookup('env', 'EXTREME_USERNAME') | default('admin') }}"
+          ansible_password: "{{ lookup('env', 'EXTREME_PASSWORD') | default('') }}"
+          ansible_ssh_pass: "{{ lookup('env', 'EXTREME_PASSWORD') | default('') }}"
+          device_type: extreme_exos
+          bgp_asn: 65003
+          role: distribution_switch
+          site: primary_dc
+    
+    # Cloud Provider Groups
+    aws_vpc:
+      hosts:
+        aws-vpc-01:
+          ansible_host: "{{ lookup('env', 'AWS_VPC_ID') | default('vpc-12345678') }}"
+          ansible_connection: local
+          cloud_provider: aws
+          region: "{{ lookup('env', 'AWS_DEFAULT_REGION') | default('us-east-1') }}"
+          vpc_cidr: 10.0.0.0/16
+    
+    azure_vnet:
+      hosts:
+        azure-vnet-01:
+          ansible_host: "{{ lookup('env', 'AZURE_VNET_NAME') | default('blazingswitch-vnet') }}"
+          ansible_connection: local
+          cloud_provider: azure
+          resource_group: "{{ lookup('env', 'AZURE_RESOURCE_GROUP') | default('blazingswitch-rg') }}"
+          location: "{{ lookup('env', 'AZURE_LOCATION') | default('eastus') }}"
+          vnet_cidr: 10.1.0.0/16
+    
+    gcp_vpc:
+      hosts:
+        gcp-vpc-01:
+          ansible_host: "{{ lookup('env', 'GCP_VPC_NAME') | default('blazingswitch-vpc') }}"
+          ansible_connection: local
+          cloud_provider: gcp
+          project_id: "{{ lookup('env', 'GCP_PROJECT_ID') | default('') }}"
+          region: "{{ lookup('env', 'GCP_REGION') | default('us-central1') }}"
+          vpc_cidr: 10.2.0.0/16
+    
+    # Functional Groups
+    bgp_peers:
+      children:
+        arista_core
+        cisco_access
+        extreme_distribution
+    
+    network_devices:
+      children:
+        arista_core
+        cisco_access
+        extreme_distribution
+    
+    cloud_networks:
+      children:
+        aws_vpc
+        azure_vnet
+        gcp_vpc
+    
+    # Site Groups
+    primary_dc:
+      children:
+        arista_core
+        cisco_access
+        extreme_distribution
+    
+    # Role Groups
+    core_routers:
+      hosts:
+        arista-core-01:
+        arista-core-02:
+    
+    access_switches:
+      hosts:
+        cisco-access-01:
+        cisco-access-02:
+    
+    distribution_switches:
+      hosts:
+        extreme-dist-01:
+
+  vars:
+    # Global Variables
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    ansible_ssh_extra_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    
+    # BGP Configuration
+    bgp_global_asn: 65000
+    bgp_route_reflector: true
+    bgp_route_reflector_clients:
+      - cisco_access
+      - extreme_distribution
+    
+    # Network Configuration
+    management_vlan: 100
+    data_vlan: 200
+    voice_vlan: 300
+    
+    # Cloud Configuration
+    enable_cloud_peering: true
+    cloud_peering_asn: 65099
+    
+    # Output Configuration
+    output_directory: "/project_outputs/blazingswitch"
+    log_level: info
+    backup_configs: true
+    backup_interval: daily

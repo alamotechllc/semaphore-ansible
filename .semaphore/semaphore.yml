@@ -1,0 +1,53 @@
+version: v1.0
+name: Multi-Client Automation
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu2004
+
+blocks:
+  - name: Deploy
+    task:
+      jobs:
+        - name: Deploy to Client
+          commands:
+            - echo "Starting deployment for client: $CLIENT"
+            - ./semaphore/deploy.sh $CLIENT
+            - echo "Deployment completed successfully for client: $CLIENT"
+      prologue:
+        commands:
+          - checkout
+          - echo "Environment: $ENVIRONMENT"
+          - echo "Client: $CLIENT"
+          - ls -la clients/
+      epilogue:
+        always:
+          commands:
+            - echo "Deployment finished for client: $CLIENT"
+            - echo "Check outputs/ directory for results"
+
+promotions:
+  - name: Deploy to Production
+    pipeline_file: .semaphore/semaphore.yml
+    auto_promote_on:
+      - result: passed
+        branch:
+          - main
+
+secrets:
+  - name: branchsix-vars
+    files:
+      - path: ssh_key
+        content: encrypted
+  - name: kiker-vars
+    files:
+      - path: ssh_key
+        content: encrypted
+  - name: clearpick-vars
+    files:
+      - path: ssh_key
+        content: encrypted
+  - name: blazingswitch-vars
+    files:
+      - path: ssh_key
+        content: encrypted

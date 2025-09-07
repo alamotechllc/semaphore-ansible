@@ -1,0 +1,44 @@
+# cursor.rules — AI generation constraints for BlazingSwitch BGP Automation
+
+# ❗ General
+- Prefer Ansible playbooks and YAML syntax
+- Write idempotent, taggable playbooks (e.g. `tags: [discovery]`)
+- Keep all files within the project directory structure
+- Do not write any hardcoded secrets, IPs, or SSH keys — use variables
+
+# ✅ Output Management
+- All playbooks must save artifacts to:
+  `/project_outputs/{{ semaphore_project_name | default("manual") }}/`
+- Never write files to `/tmp`, `/home`, or unspecified paths
+
+# 🔐 Credential Handling
+- Use `.env.template` for any secrets
+- SSH keys are expected in `/etc/semaphore/ssh_keys/`
+
+# 🔄 Playbooks
+- All playbooks must support `--check` mode (dry run)
+- Use `network_cli` for Arista, Cisco, and Extreme unless specified otherwise
+
+# 📁 Project Structure Rules
+- Inventories go in `ansible/inventories/`
+- Playbooks go in `ansible/playbooks/`
+- Shared variables go in `ansible/group_vars/all.yml`
+- Dockerfile must install:
+    - Ansible
+    - arista.eos
+    - cisco.ios
+    - extreme.networking
+    - community.aws
+    - azure.azcollection
+    - google.cloud
+
+# 🐳 Semaphore Docker Rules
+- NEVER create `/etc/semaphore/projects` directory in Dockerfile
+- Mount Ansible content to `/opt/blazingswitch/ansible` to avoid conflicts
+- Semaphore config file must be mounted before any other volume mounts
+- Use minimal config file approach for Semaphore v2.14+
+- Test Semaphore UI loads before adding Ansible projects
+
+# 🧪 Testing
+- Provide example `ansible-playbook` test commands for all playbooks
+- Lint all YAML with `ansible-lint`

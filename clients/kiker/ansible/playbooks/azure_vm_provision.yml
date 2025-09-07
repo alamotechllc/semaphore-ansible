@@ -1,0 +1,97 @@
+---
+- name: Provision Azure VMs for Kiker CPA
+  hosts: localhost
+  gather_facts: false
+  vars:
+    resource_group: "kiker-cpa-rg"
+    location: "centralus"
+
+
+    vm_size: "Standard_B2s"
+    admin_username: "azureuser"
+    vm_count: 2
+    
+  tasks:
+    - name: Verify Azure CLI authentication
+      azure_rm_resourcegroup_info:
+        name: "{{ resource_group }}"
+      register: rg_check
+      ignore_errors: yes
+
+    - name: Display Azure connection status
+      debug:
+        msg: "Azure CLI authentication successful"
+      when: rg_check.resourcegroups is defined
+
+    - name: Create resource group
+      azure_rm_resourcegroup:
+        name: "{{ resource_group }}"
+        location: "{{ location }}"
+        state: present
+
+    - name: Create virtual network
+      azure_rm_virtualnetwork:
+        resource_group: "{{ resource_group }}"
+        name: "kiker-cpa-vnet"
+        address_prefixes: "10.0.0.0/16"
+        state: present
+
+    - name: Create subnet
+      azure_rm_subnet:
+        resource_group: "{{ resource_group }}"
+        name: "default"
+        address_prefix: "10.0.1.0/24"
+        virtual_network: "kiker-cpa-vnet"
+        state: present
+
+    - name: Create security group
+      azure_rm_securitygroup:
+        resource_group: "{{ resource_group }}"
+        name: "kiker-cpa-nsg"
+        rules:
+          - name: SSH
+            protocol: Tcp
+            destination_port_range: 22
+            access: Allow
+            priority: 100
+            direction: Inbound
+          - name: HTTP
+            protocol: Tcp
+            destination_port_range: 80
+            access: Allow
+            priority: 200
+            direction: Inbound
+          - name: HTTPS
+            protocol: Tcp
+            destination_port_range: 443
+            access: Allow
+            priority: 300
+            direction: Inbound
+
+    - name: Provision VMs
+      azure_rm_virtualmachine:
+        resource_group: "{{ resource_group }}"
+        name: "kiker-cpa-vm-{{ item }}"
+        vm_size: "{{ vm_size }}"
+        admin_username: "{{ admin_username }}"
+        ssh_password_enabled: false
+        ssh_public_keys:
+          - path: /home/azureuser/.ssh/authorized_keys
+            key_data: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+        image:
+          offer: UbuntuServer
+          publisher: Canonical
+          sku: 18.04-LTS
+          version: latest
+        virtual_network: "kiker-cpa-vnet"
+        subnet: "default"
+        network_security_group: "kiker-cpa-nsg"
+        state: present
+      loop: "{{ range(1, vm_count + 1) | list }}"
+      register: vm_results
+
+    - name: Display VM information
+      debug:
+        msg: "VM {{ item.name }} created with IP {{ item.public_ip }}"
+      loop: "{{ vm_results.results }}"
+      when: item is defined and item.public_ip is defined

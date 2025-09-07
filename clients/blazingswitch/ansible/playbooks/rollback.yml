@@ -1,0 +1,389 @@
+---
+- name: BlazingSwitch - Emergency Rollback Playbook
+  hosts: bgp_peers
+  gather_facts: false
+  tags:
+    - rollback
+    - emergency
+    - recovery
+  
+  vars:
+    rollback_output_dir: "{{ output_config.rollback_logs }}"
+    timestamp: "{{ ansible_date_time.iso8601 }}"
+    backup_enabled: "{{ backup_configs | default(true) }}"
+    rollback_to_config: "{{ rollback_config_file | default('') }}"
+    emergency_mode: "{{ emergency_rollback | default(false) }}"
+  
+  pre_tasks:
+    - name: Create rollback output directory
+      file:
+        path: "{{ rollback_output_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+    
+    - name: Set fact for rollback timestamp
+      set_fact:
+        rollback_timestamp: "{{ timestamp }}"
+    
+    - name: Display rollback start message
+      debug:
+        msg: "Starting emergency rollback for {{ inventory_hostname }} at {{ rollback_timestamp }}"
+    
+    - name: Validate rollback requirements
+      block:
+        - name: Check if device is reachable
+          ping:
+            host: "{{ ansible_host }}"
+            count: 3
+          register: ping_result
+          failed_when: ping_result.packet_loss > 0
+        
+        - name: Verify SSH connectivity
+          wait_for:
+            host: "{{ ansible_host }}"
+            port: 22
+            timeout: 30
+          register: ssh_check
+        
+        - name: Check device role and type
+          assert:
+            that:
+              - device_type is defined
+              - role is defined
+            fail_msg: "Missing required device information: device_type or role"
+    
+    - name: Backup current configuration before rollback
+      block:
+        - name: Get current running configuration
+          arista.eos.eos_config:
+            retrieve: running
+          register: current_config
+          when: device_type == "arista_eos"
+        
+        - name: Get current running configuration (Cisco)
+          cisco.ios.ios_config:
+            retrieve: running
+          register: current_config
+          when: device_type == "cisco_ios"
+        
+        - name: Get current running configuration (Extreme)
+          extreme.exos.exos_config:
+            retrieve: running
+          register: current_config
+          when: device_type == "extreme_exos"
+        
+        - name: Save pre-rollback configuration
+          copy:
+            content: "{{ current_config.running_config }}"
+            dest: "{{ rollback_output_dir }}/{{ inventory_hostname }}_pre_rollback_{{ rollback_timestamp }}.cfg"
+          delegate_to: localhost
+          when: backup_enabled
+      when: backup_enabled
+  
+  tasks:
+    - name: Determine rollback configuration source
+      set_fact:
+        rollback_source: "{{ 'emergency_static' if emergency_mode else rollback_to_config }}"
+    
+    - name: Emergency rollback to static routes
+      block:
+        - name: Remove BGP configuration (Arista)
+          arista.eos.eos_config:
+            lines:
+              - no router bgp {{ bgp_asn }}
+          when: device_type == "arista_eos"
+        
+        - name: Remove BGP configuration (Cisco)
+          cisco.ios.ios_config:
+            lines:
+              - no router bgp {{ bgp_asn }}
+          when: device_type == "cisco_ios"
+        
+        - name: Remove BGP configuration (Extreme)
+          extreme.exos.exos_config:
+            lines:
+              - no router bgp {{ bgp_asn }}
+          when: device_type == "extreme_exos"
+        
+        - name: Remove route maps
+          arista.eos.eos_config:
+            lines:
+              - no route-map BLAZINGSWITCH-EXPORT
+              - no route-map BLAZINGSWITCH-IMPORT
+          when: device_type == "arista_eos"
+        
+        - name: Remove route maps (Cisco)
+          cisco.ios.ios_config:
+            lines:
+              - no route-map BLAZINGSWITCH-EXPORT
+              - no route-map BLAZINGSWITCH-IMPORT
+          when: device_type == "cisco_ios"
+        
+        - name: Remove route maps (Extreme)
+          extreme.exos.exos_config:
+            lines:
+              - no route-map BLAZINGSWITCH-EXPORT
+              - no route-map BLAZINGSWITCH-IMPORT
+          when: device_type == "extreme_exos"
+        
+        - name: Restore static routes (Arista)
+          arista.eos.eos_config:
+            lines:
+              - ip route {{ item.network }} {{ item.mask }} {{ item.next_hop }}
+          loop: "{{ static_routes_backup | default([]) }}"
+          when: device_type == "arista_eos" and static_routes_backup is defined
+        
+        - name: Restore static routes (Cisco)
+          cisco.ios.ios_config:
+            lines:
+              - ip route {{ item.network }} {{ item.mask }} {{ item.next_hop }}
+          loop: "{{ static_routes_backup | default([]) }}"
+          when: device_type == "cisco_ios" and static_routes_backup is defined
+        
+        - name: Restore static routes (Extreme)
+          extreme.exos.exos_config:
+            lines:
+              - ip route {{ item.network }} {{ item.mask }} {{ item.next_hop }}
+          loop: "{{ static_routes_backup | default([]) }}"
+          when: device_type == "extreme_exos" and static_routes_backup is defined
+        
+        - name: Restore default static routes
+          arista.eos.eos_config:
+            lines:
+              - ip route 0.0.0.0/0 {{ default_gateway | default('192.168.1.1') }}
+          when: device_type == "arista_eos" and default_gateway is defined
+        
+        - name: Restore default static routes (Cisco)
+          cisco.ios.ios_config:
+            lines:
+              - ip route 0.0.0.0 0.0.0.0 {{ default_gateway | default('192.168.1.1') }}
+          when: device_type == "cisco_ios" and default_gateway is defined
+        
+        - name: Restore default static routes (Extreme)
+          extreme.exos.exos_config:
+            lines:
+              - ip route 0.0.0.0/0 {{ default_gateway | default('192.168.1.1') }}
+          when: device_type == "extreme_exos" and default_gateway is defined
+      when: emergency_mode
+    
+    - name: Rollback to specific configuration file
+      block:
+        - name: Load rollback configuration
+          include_vars: "{{ rollback_to_config }}"
+          when: rollback_to_config != ""
+        
+        - name: Apply rollback configuration (Arista)
+          arista.eos.eos_config:
+            src: "{{ rollback_config_path }}"
+          when: device_type == "arista_eos" and rollback_config_path is defined
+        
+        - name: Apply rollback configuration (Cisco)
+          cisco.ios.ios_config:
+            src: "{{ rollback_config_path }}"
+          when: device_type == "cisco_ios" and rollback_config_path is defined
+        
+        - name: Apply rollback configuration (Extreme)
+          extreme.exos.exos_config:
+            src: "{{ rollback_config_path }}"
+          when: device_type == "extreme_exos" and rollback_config_path is defined
+      when: not emergency_mode and rollback_to_config != ""
+    
+    - name: Verify rollback configuration
+      block:
+        - name: Wait for configuration to apply
+          wait_for:
+            timeout: 30
+        
+        - name: Check routing table
+          arista.eos.eos_command:
+            commands:
+              - show ip route
+          register: routing_table
+          when: device_type == "arista_eos"
+        
+        - name: Check routing table (Cisco)
+          cisco.ios.ios_command:
+            commands:
+              - show ip route
+          register: routing_table
+          when: device_type == "cisco_ios"
+        
+        - name: Check routing table (Extreme)
+          extreme.exos.exos_command:
+            commands:
+              - show ip route
+          register: routing_table
+          when: device_type == "extreme_exos"
+        
+        - name: Validate routing table
+          assert:
+            that:
+              - routing_table.stdout[0] | regex_search('S\\s+\\d+\\.\\d+\\.\\d+\\.\\d+/\\d+')
+            fail_msg: "No static routes found in routing table after rollback"
+    
+    - name: Verify BGP removal
+      block:
+        - name: Check BGP status
+          arista.eos.eos_command:
+            commands:
+              - show ip bgp summary
+          register: bgp_status
+          when: device_type == "arista_eos"
+        
+        - name: Check BGP status (Cisco)
+          cisco.ios.ios_command:
+            commands:
+              - show ip bgp summary
+          register: bgp_status
+          when: device_type == "cisco_ios"
+        
+        - name: Check BGP status (Extreme)
+          extreme.exos.exos_command:
+            commands:
+              - show ip bgp summary
+          register: bgp_status
+          when: device_type == "extreme_exos"
+        
+        - name: Validate BGP removal
+          assert:
+            that:
+              - bgp_status.stdout[0] | regex_search('BGP is not running|BGP not configured|No BGP')
+            fail_msg: "BGP still running after rollback"
+    
+    - name: Test basic connectivity
+      block:
+        - name: Test ping to default gateway
+          ping:
+            host: "{{ default_gateway | default('192.168.1.1') }}"
+            count: 3
+          register: ping_test
+          failed_when: ping_test.packet_loss > 0
+        
+        - name: Test ping to management network
+          ping:
+            host: "{{ ansible_host }}"
+            count: 3
+          register: mgmt_ping_test
+          failed_when: mgmt_ping_test.packet_loss > 0
+    
+    - name: Save post-rollback configuration
+      block:
+        - name: Get post-rollback configuration
+          arista.eos.eos_config:
+            retrieve: running
+          register: post_config
+          when: device_type == "arista_eos"
+        
+        - name: Get post-rollback configuration (Cisco)
+          cisco.ios.ios_config:
+            retrieve: running
+          register: post_config
+          when: device_type == "cisco_ios"
+        
+        - name: Get post-rollback configuration (Extreme)
+          extreme.exos.exos_config:
+            retrieve: running
+          register: post_config
+          when: device_type == "extreme_exos"
+        
+        - name: Save post-rollback configuration
+          copy:
+            content: "{{ post_config.running_config }}"
+            dest: "{{ rollback_output_dir }}/{{ inventory_hostname }}_post_rollback_{{ rollback_timestamp }}.cfg"
+          delegate_to: localhost
+    
+    - name: Generate rollback report
+      set_fact:
+        rollback_report:
+          hostname: "{{ inventory_hostname }}"
+          timestamp: "{{ rollback_timestamp }}"
+          device_type: "{{ device_type }}"
+          role: "{{ role }}"
+          rollback_mode: "{{ 'emergency' if emergency_mode else 'configuration_file' }}"
+          rollback_source: "{{ rollback_source }}"
+          pre_config: "{{ current_config.running_config if current_config is defined else 'N/A' }}"
+          post_config: "{{ post_config.running_config if post_config is defined else 'N/A' }}"
+          routing_table: "{{ routing_table.stdout[0] if routing_table is defined else 'N/A' }}"
+          bgp_status: "{{ bgp_status.stdout[0] if bgp_status is defined else 'N/A' }}"
+          connectivity_test: "{{ ping_test.packet_loss == 0 if ping_test is defined else 'N/A' }}"
+          status: "completed"
+    
+    - name: Save rollback report
+      copy:
+        content: "{{ rollback_report | to_nice_json }}"
+        dest: "{{ rollback_output_dir }}/{{ inventory_hostname }}_rollback_report_{{ rollback_timestamp }}.json"
+      delegate_to: localhost
+    
+    - name: Display rollback completion message
+      debug:
+        msg: "Rollback completed for {{ inventory_hostname }}. Report saved to {{ rollback_output_dir }}"
+  
+  post_tasks:
+    - name: Create rollback summary
+      set_fact:
+        rollback_summary:
+          timestamp: "{{ rollback_timestamp }}"
+          devices_processed: "{{ groups.bgp_peers | length }}"
+          successful_rollbacks: "{{ groups.bgp_peers | length }}"
+          failed_rollbacks: 0
+          rollback_mode: "{{ 'emergency' if emergency_mode else 'configuration_file' }}"
+          output_directory: "{{ rollback_output_dir }}"
+          status: "completed"
+    
+    - name: Save rollback summary
+      copy:
+        content: "{{ rollback_summary | to_nice_json }}"
+        dest: "{{ rollback_output_dir }}/rollback_summary_{{ rollback_timestamp }}.json"
+      delegate_to: localhost
+      run_once: true
+    
+    - name: Create rollback index file
+      copy:
+        content: |
+          # BlazingSwitch Emergency Rollback Results
+          # Generated: {{ rollback_timestamp }}
+          
+          ## Rollback Summary
+          - Timestamp: {{ rollback_timestamp }}
+          - Devices Processed: {{ groups.bgp_peers | length }}
+          - Rollback Mode: {{ 'Emergency' if emergency_mode else 'Configuration File' }}
+          - Status: Completed
+          
+          ## Device Reports
+          {% for host in groups.bgp_peers %}
+          - {{ host }}: {{ rollback_output_dir }}/{{ host }}_rollback_report_{{ rollback_timestamp }}.json
+          {% endfor %}
+          
+          ## Configuration Files
+          - Pre-rollback: `*_pre_rollback_*.cfg`
+          - Post-rollback: `*_post_rollback_*.cfg`
+          - Summary: `rollback_summary_{{ rollback_timestamp }}.json`
+          
+          ## Rollback Details
+          - Mode: {{ 'Emergency rollback to static routes' if emergency_mode else 'Rollback to specific configuration' }}
+          - Source: {{ rollback_source }}
+          
+          ## Next Steps
+          1. Verify network connectivity
+          2. Test critical services
+          3. Investigate root cause
+          4. Plan next deployment attempt
+        dest: "{{ rollback_output_dir }}/README.md"
+      delegate_to: localhost
+      run_once: true
+    
+    - name: Display final rollback summary
+      debug:
+        msg: |
+          ========================================
+          EMERGENCY ROLLBACK COMPLETED
+          ========================================
+          Timestamp: {{ rollback_timestamp }}
+          Devices Processed: {{ groups.bgp_peers | length }}
+          Rollback Mode: {{ 'Emergency' if emergency_mode else 'Configuration File' }}
+          Status: Completed Successfully
+          Output Directory: {{ rollback_output_dir }}
+          ========================================
+      run_once: true

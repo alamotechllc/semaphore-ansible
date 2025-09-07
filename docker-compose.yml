@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  semaphore:
+    image: semaphoreui/semaphore:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - SEMAPHORE_ENCRYPTION_KEY=${SEMAPHORE_ENCRYPTION_KEY}
+      - SEMAPHORE_DB_HOST=db
+      - SEMAPHORE_DB_PORT=3306
+      - SEMAPHORE_DB_USER=semaphore
+      - SEMAPHORE_DB_PASS=semaphore
+      - SEMAPHORE_DB_NAME=semaphore
+      - SEMAPHORE_DB_DRIVER=mysql
+      - SEMAPHORE_PORT=3000
+      - SEMAPHORE_INTERFACE=0.0.0.0
+      # Fix Git environment variables
+      - GIT_TERMINAL_PROMPT=0
+      - GIT_ASKPASS=
+      - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no
+    volumes:
+      - ./outputs:/project_outputs
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - blazingswitch_net
+
+  db:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=semaphore
+      - MYSQL_USER=semaphore
+      - MYSQL_PASSWORD=semaphore
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    networks:
+      - blazingswitch_net
+
+volumes:
+  mysql_data:
+
+networks:
+  blazingswitch_net:
+    driver: bridge
