@@ -8,7 +8,7 @@
     deployment_type: "ubuntu-update"
     # Alamo Tech configuration (hardcoded from targets.env)
     HOST: "100.106.25.78"
-            USER: "root"
+    USER: "root"
     ENVIRONMENT: "production"
     PROJECT: "alamo-tech"
     REGION: "us-central-1"
