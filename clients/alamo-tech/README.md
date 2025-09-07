@@ -1,95 +1,159 @@
 # Alamo Tech Client Configuration
 
-This directory contains all Alamo Tech-specific configuration and automation files.
+## Overview
+This directory contains all automation configurations and runbooks for Alamo Tech client deployments.
 
-## Directory Structure
+## Available Deployments
 
+### 1. Ubuntu Server Updates
+**Purpose**: Keep Ubuntu servers up to date with security patches and package updates
+
+**Usage**:
+```bash
+# Via Semaphore
+Deployment Type: ubuntu-update
+
+# Manual execution
+./shared/scripts/ubuntu_update.sh \
+  --client "alamo-tech" \
+  --client-dir "clients/alamo-tech" \
+  --ssh-key "/path/to/ssh_key" \
+  --host "100.106.25.78" \
+  --user "root" \
+  --update-type "standard"
 ```
-clients/alamo-tech/
-├── env/
-│   └── targets.env              # Target server configuration
-└── README.md                   # This file
+
+**Features**:
+- ✅ Intelligent update checking (only updates if needed)
+- ✅ Multiple update types (standard, security, full, minimal)
+- ✅ Comprehensive logging
+- ✅ Force update option
+- ✅ Dry run capability
+
+### 2. Zabbix Server Upgrade
+**Purpose**: Safely upgrade Zabbix monitoring server with backup and rollback capability
+
+**Usage**:
+```bash
+# Via Semaphore
+Deployment Type: zabbix-upgrade
+
+# Manual execution
+./shared/scripts/zabbix_upgrade.sh \
+  --client "alamo-tech" \
+  --client-dir "clients/alamo-tech" \
+  --ssh-key "/path/to/ssh_key" \
+  --host "100.106.25.78" \
+  --user "root" \
+  --zabbix-version "6.4" \
+  --backup \
+  --validate-upgrade
 ```
 
-## Configuration
+**Features**:
+- ✅ Pre-upgrade system validation
+- ✅ Automatic backup creation
+- ✅ Safe upgrade process
+- ✅ Post-upgrade validation
+- ✅ Automatic rollback on failure
+- ✅ Comprehensive logging
 
-### Environment Variables
+## Configuration Files
 
-The `env/targets.env` file contains:
-- `HOST`: Target server IP or hostname
-- `USER`: SSH user (defaults to ubuntu)
-- `ENVIRONMENT`: Environment type (production)
-- `PROJECT`: Project name (alamo-tech)
-- `REGION`: AWS region (us-central-1)
+### `env/targets.env`
+Main configuration file containing:
+- Server connection details
+- Deployment preferences
+- Feature toggles
+- Client-specific settings
 
-### Alamo Tech Specific Configuration
-- `COMPANY_NAME`: Company name (Alamo Tech)
-- `DEPLOYMENT_TIER`: Deployment tier (enterprise)
-- `MONITORING_ENABLED`: Monitoring status (true)
-- `BACKUP_ENABLED`: Backup status (true)
-
-## Deployment
-
-To deploy to Alamo Tech:
-
-1. **Set the client environment variable:**
-   ```bash
-   export CLIENT=alamo-tech
-   ```
-
-2. **Run the deployment:**
-   ```bash
-   # Standard deployment
-   ./semaphore/deploy.sh alamo-tech standard
-   
-   # Ubuntu server update
-   ./semaphore/deploy.sh alamo-tech ubuntu-update
-   ```
-
-3. **Or trigger via Semaphore:**
-   - Set `CLIENT=alamo-tech` in the pipeline
-   - The system will automatically use the `alamo-vars` secret group
+### `ansible/playbooks/`
+Ansible playbooks for orchestrated deployments:
+- `ubuntu_update.yml` - Ubuntu server updates
+- `zabbix_upgrade.yml` - Zabbix server upgrades
 
 ## Deployment Types
 
-### Standard Deployment
-- **Purpose**: Basic server connectivity and health checks
-- **Commands**: `hostname && uptime`
-- **Output**: Simple connectivity verification
-- **Use Case**: Basic monitoring and health checks
+| Type | Description | Script | Playbook |
+|------|-------------|--------|----------|
+| `standard` | Basic connectivity test | `deploy_zabbix.sh` | N/A |
+| `ubuntu-update` | Ubuntu package updates | `ubuntu_update.sh` | `ubuntu_update.yml` |
+| `zabbix-upgrade` | Zabbix server upgrade | `zabbix_upgrade.sh` | `zabbix_upgrade.yml` |
 
-### Ubuntu Update Deployment
-- **Purpose**: Ubuntu server system updates and maintenance
-- **Commands**: `apt update && apt upgrade -y`
-- **Output**: Comprehensive update logs with system information
-- **Use Case**: Regular server maintenance and security updates
-- **Options**: 
-  - `standard`: Regular package updates
-  - `security`: Security updates only
-  - `full`: Complete system update including dist-upgrade
-  - `minimal`: Updates without recommended packages
+## Semaphore Integration
 
-### Future Expansion
-Alamo Tech can be extended to support:
-- **Network automation**: For network device management
-- **Azure deployment**: For cloud infrastructure
-- **Custom automation**: For specific Alamo Tech requirements
+### Required Secret Groups
+- `alamo-vars`: Contains SSH key for server access
 
-## Security
+### Pipeline Configuration
+- **Repository**: `https://github.com/alamotechllc/semaphore-ansible`
+- **Branch**: `main`
+- **Playbook**: `semaphore/deploy.sh`
 
-- SSH keys are managed through Semaphore secrets (`alamo-vars`)
-- All sensitive configuration is stored in environment files
-- Enterprise-grade security with monitoring and backup enabled
+### Usage Examples
+```bash
+# Ubuntu Update
+./semaphore/deploy.sh alamo-tech ubuntu-update
 
-## Maintenance
+# Zabbix Upgrade
+./semaphore/deploy.sh alamo-tech zabbix-upgrade
+```
 
-- Update `targets.env` for configuration changes
-- Add ansible directory for advanced automation if needed
-- Modify deployment scripts for custom requirements
+## Logs and Outputs
+
+All deployment logs are stored in:
+- `outputs/alamo-tech/` - Local execution logs
+- Semaphore build logs - CI/CD execution logs
+
+## Safety Features
+
+### Ubuntu Updates
+- ✅ Update availability checking
+- ✅ Dry run mode
+- ✅ Comprehensive logging
+- ✅ Rollback capability (manual)
+
+### Zabbix Upgrades
+- ✅ System requirement validation
+- ✅ Automatic backup creation
+- ✅ Version validation
+- ✅ Automatic rollback on failure
+- ✅ Service status verification
+
+## Troubleshooting
+
+### Common Issues
+
+1. **SSH Connection Failed**
+   - Verify SSH key is correct
+   - Check server accessibility
+   - Confirm user permissions
+
+2. **Update Script Skipped**
+   - Check if updates are actually available
+   - Use `--force` flag if needed
+   - Verify script permissions
+
+3. **Zabbix Upgrade Failed**
+   - Check system requirements
+   - Verify database connectivity
+   - Review backup creation
+   - Check service status
+
+### Log Locations
+- Ubuntu Updates: `outputs/alamo-tech/ubuntu_update_YYYYMMDD_HHMMSS.log`
+- Zabbix Upgrades: `outputs/alamo-tech/zabbix_upgrade_YYYYMMDD_HHMMSS.log`
 
 ## Support
 
-For Alamo Tech specific issues:
-- Check deployment logs in `outputs/alamo-tech/`
-- Verify SSH connectivity to target servers
-- Ensure proper secret configuration in Semaphore
+For issues or questions:
+1. Check the logs in `outputs/alamo-tech/`
+2. Review Semaphore build logs
+3. Verify configuration in `env/targets.env`
+4. Test connectivity manually
+
+## Version History
+
+- **v1.0**: Initial Ubuntu update automation
+- **v1.1**: Added intelligent update checking
+- **v2.0**: Added Zabbix upgrade automation with backup/rollback

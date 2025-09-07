@@ -1,0 +1,84 @@
+---
+- name: Zabbix Server Upgrade for Alamo Tech
+  hosts: localhost
+  gather_facts: false
+  vars:
+    client: "alamo-tech"
+    client_dir: "clients/{{ client }}"
+    deployment_type: "zabbix-upgrade"
+    # Alamo Tech configuration (hardcoded from targets.env)
+    HOST: "100.106.25.78"
+    USER: "root"
+    ENVIRONMENT: "production"
+    PROJECT: "alamo-tech"
+    REGION: "us-central-1"
+    # Zabbix Upgrade Configuration
+    ZABBIX_VERSION: "6.4"
+    BACKUP_ENABLED: "true"
+    DRY_RUN: "false"
+    ROLLBACK_ON_FAILURE: "true"
+    VALIDATE_UPGRADE: "true"
+    # Alamo Tech specific configuration
+    COMPANY_NAME: "Alamo Tech"
+    DEPLOYMENT_TIER: "enterprise"
+    MONITORING_ENABLED: "true"
+    BACKUP_ENABLED: "true"
+    
+  tasks:
+      
+    - name: Display deployment information
+      debug:
+        msg:
+          - "Client: {{ client }}"
+          - "Target Host: {{ HOST }}"
+          - "SSH User: {{ USER }}"
+          - "Deployment Type: {{ deployment_type }}"
+          - "Target Zabbix Version: {{ ZABBIX_VERSION }}"
+          - "Backup Enabled: {{ BACKUP_ENABLED }}"
+          - "Rollback on Failure: {{ ROLLBACK_ON_FAILURE }}"
+          
+    - name: Check if Zabbix upgrade script exists
+      shell: ls -la /tmp/semaphore/project_5/repository_3_template_3/shared/scripts/zabbix_upgrade.sh
+      register: script_check
+      
+    - name: Debug script check
+      debug:
+        var: script_check.stdout_lines
+        
+    - name: Check script permissions
+      shell: ls -la /tmp/semaphore/project_5/repository_3_template_3/shared/scripts/
+      register: script_perms
+      
+    - name: Debug script permissions
+      debug:
+        var: script_perms.stdout_lines
+        
+    - name: Run Zabbix upgrade deployment
+      shell: |
+        cd /tmp/semaphore/project_5/repository_3_template_3
+        chmod +x ./shared/scripts/zabbix_upgrade.sh
+        ./shared/scripts/zabbix_upgrade.sh \
+          --client "{{ client }}" \
+          --client-dir "{{ client_dir }}" \
+          --ssh-key "$SEMAPHORE_SECRET_DIR/ssh_key" \
+          --host "{{ HOST }}" \
+          --user "{{ USER }}" \
+          --zabbix-version "{{ ZABBIX_VERSION }}" \
+          {% if BACKUP_ENABLED | default('true') == 'true' %}--backup{% else %}--no-backup{% endif %} \
+          {% if DRY_RUN | default('false') == 'true' %}--dry-run{% endif %} \
+          {% if ROLLBACK_ON_FAILURE | default('true') == 'false' %}--no-rollback{% endif %} \
+          {% if VALIDATE_UPGRADE | default('true') == 'false' %}--no-validation{% endif %}
+      register: upgrade_result
+      
+    - name: Display upgrade results
+      debug:
+        var: upgrade_result.stdout_lines
+        
+    - name: Check for upgrade errors
+      fail:
+        msg: "Zabbix upgrade failed"
+      when: upgrade_result.rc != 0
+      
+    - name: Upgrade completed successfully
+      debug:
+        msg: "Zabbix upgrade completed successfully for {{ client }}"

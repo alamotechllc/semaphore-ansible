@@ -121,9 +121,17 @@ case "$DEPLOYMENT_TYPE" in
             --ssh-key "$SSH_KEY" \
             --update-type "standard" > "outputs/$CLIENT/ubuntu_update.log" 2>&1
         ;;
+    "zabbix-upgrade")
+        echo "Running Zabbix server upgrade..."
+        ./shared/scripts/zabbix_upgrade.sh \
+            --client "$CLIENT" \
+            --client-dir "$CLIENT_DIR" \
+            --ssh-key "$SSH_KEY" \
+            --zabbix-version "6.4" > "outputs/$CLIENT/zabbix_upgrade.log" 2>&1
+        ;;
     *)
         echo "Unknown deployment type: $DEPLOYMENT_TYPE"
-        echo "Available types: standard, network, azure, ubuntu-update"
+        echo "Available types: standard, network, azure, ubuntu-update, zabbix-upgrade"
         exit 1
         ;;
 esac
