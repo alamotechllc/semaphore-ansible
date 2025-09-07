@@ -8,12 +8,8 @@
     deployment_type: "ubuntu-update"
     
   tasks:
-    - name: Get repository root directory
-      shell: pwd
-      register: repo_root
-      
     - name: Load client configuration
-      include_vars: "{{ repo_root.stdout }}/{{ client_dir }}/env/targets.env"
+      include_vars: "/tmp/semaphore/project_5/repository_3_template_3/{{ client_dir }}/env/targets.env"
       
     - name: Display deployment information
       debug:
@@ -25,7 +21,7 @@
           
     - name: Run Ubuntu update deployment
       shell: |
-        cd "{{ repo_root.stdout }}"
+        cd /tmp/semaphore/project_5/repository_3_template_3
         ./shared/scripts/ubuntu_update.sh \
           --client "{{ client }}" \
           --client-dir "{{ client_dir }}" \
