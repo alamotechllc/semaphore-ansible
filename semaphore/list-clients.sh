@@ -47,6 +47,7 @@ done
 echo "=========================================="
 echo "Usage Examples:"
 echo "  ./semaphore/deploy.sh alamo-tech standard"
+echo "  ./semaphore/deploy.sh alamo-tech ubuntu-update"
 echo "  ./semaphore/deploy.sh blazingswitch network"
 echo "  ./semaphore/deploy.sh kiker azure"
 echo "=========================================="

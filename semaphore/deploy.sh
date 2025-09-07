@@ -5,7 +5,7 @@ set -euo pipefail
 if [[ $# -eq 0 ]]; then
     echo "Error: CLIENT argument is required"
     echo "Usage: $0 <CLIENT> [DEPLOYMENT_TYPE]"
-    echo "Available deployment types: standard, network, azure"
+    echo "Available deployment types: standard, network, azure, ubuntu-update"
     exit 1
 fi
 
@@ -30,11 +30,11 @@ fi
 
 # Validate deployment type
 case "$DEPLOYMENT_TYPE" in
-    "standard"|"network"|"azure")
+    "standard"|"network"|"azure"|"ubuntu-update")
         ;;
     *)
         echo "Error: Invalid deployment type '$DEPLOYMENT_TYPE'"
-        echo "Available types: standard, network, azure"
+        echo "Available types: standard, network, azure, ubuntu-update"
         exit 1
         ;;
 esac

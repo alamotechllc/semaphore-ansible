@@ -39,7 +39,11 @@ To deploy to Alamo Tech:
 
 2. **Run the deployment:**
    ```bash
+   # Standard deployment
    ./semaphore/deploy.sh alamo-tech standard
+   
+   # Ubuntu server update
+   ./semaphore/deploy.sh alamo-tech ubuntu-update
    ```
 
 3. **Or trigger via Semaphore:**
@@ -53,6 +57,17 @@ To deploy to Alamo Tech:
 - **Commands**: `hostname && uptime`
 - **Output**: Simple connectivity verification
 - **Use Case**: Basic monitoring and health checks
+
+### Ubuntu Update Deployment
+- **Purpose**: Ubuntu server system updates and maintenance
+- **Commands**: `apt update && apt upgrade -y`
+- **Output**: Comprehensive update logs with system information
+- **Use Case**: Regular server maintenance and security updates
+- **Options**: 
+  - `standard`: Regular package updates
+  - `security`: Security updates only
+  - `full`: Complete system update including dist-upgrade
+  - `minimal`: Updates without recommended packages
 
 ### Future Expansion
 Alamo Tech can be extended to support:

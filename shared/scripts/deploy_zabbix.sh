@@ -113,8 +113,17 @@ case "$DEPLOYMENT_TYPE" in
             echo "Warning: No ansible directory found for Azure deployment"
         fi
         ;;
+    "ubuntu-update")
+        echo "Running Ubuntu server update..."
+        ./shared/scripts/ubuntu_update.sh \
+            --client "$CLIENT" \
+            --client-dir "$CLIENT_DIR" \
+            --ssh-key "$SSH_KEY" \
+            --update-type "standard" > "outputs/$CLIENT/ubuntu_update.log" 2>&1
+        ;;
     *)
         echo "Unknown deployment type: $DEPLOYMENT_TYPE"
+        echo "Available types: standard, network, azure, ubuntu-update"
         exit 1
         ;;
 esac
