@@ -12,7 +12,7 @@ A streamlined, multi-client automation system built for Semaphore CI/CD that sup
 ### 2. Deploy to a Client
 ```bash
 # Standard deployment
-./semaphore/deploy.sh kiker standard
+./semaphore/deploy.sh alamo-tech standard
 
 # Network automation deployment
 ./semaphore/deploy.sh blazingswitch network
@@ -111,8 +111,8 @@ Each client requires a secret group named `<client>-vars` containing:
 
 ### Deploy to Different Clients
 ```bash
-# Standard deployment to Kiker
-./semaphore/deploy.sh kiker standard
+# Standard deployment to Alamo Tech
+./semaphore/deploy.sh alamo-tech standard
 
 # Network automation for Blazingswitch
 ./semaphore/deploy.sh blazingswitch network
@@ -127,7 +127,7 @@ Each client requires a secret group named `<client>-vars` containing:
 ls -la outputs/
 
 # Check specific client logs
-cat outputs/kiker/deployment.log
+cat outputs/alamo-tech/deployment.log
 cat outputs/blazingswitch/network_deployment.log
 ```
 
@@ -144,6 +144,8 @@ cat outputs/blazingswitch/network_deployment.log
 All deployments create logs in the `outputs/` directory:
 ```
 outputs/
+├── alamo-tech/
+│   └── deployment.log
 ├── kiker/
 │   ├── deployment.log
 │   └── azure_deployment.log

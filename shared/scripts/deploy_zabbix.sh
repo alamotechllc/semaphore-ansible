@@ -101,7 +101,13 @@ case "$DEPLOYMENT_TYPE" in
         echo "Running Azure deployment..."
         if [[ -d "${CLIENT_DIR}/ansible" ]]; then
             cd "${CLIENT_DIR}/ansible"
-            ansible-playbook -i inventories/azure_kiker_cpa.yml playbooks/azure_vm_provision.yml --check > "../../outputs/$CLIENT/azure_deployment.log" 2>&1
+            # Find the first available inventory file
+            inventory_file=$(find inventories/ -name "*.yml" -o -name "*.yaml" | head -1)
+            if [[ -n "$inventory_file" ]]; then
+                ansible-playbook -i "$inventory_file" playbooks/azure_vm_provision.yml --check > "../../outputs/$CLIENT/azure_deployment.log" 2>&1
+            else
+                echo "Warning: No inventory file found for Azure deployment"
+            fi
             cd - > /dev/null
         else
             echo "Warning: No ansible directory found for Azure deployment"
