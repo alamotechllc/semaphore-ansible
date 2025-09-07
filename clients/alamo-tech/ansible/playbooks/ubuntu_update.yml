@@ -6,27 +6,21 @@
     client: "alamo-tech"
     client_dir: "clients/{{ client }}"
     deployment_type: "ubuntu-update"
+    # Alamo Tech configuration (hardcoded from targets.env)
+    HOST: "100.106.25.78"
+    USER: "ubuntu"
+    ENVIRONMENT: "production"
+    PROJECT: "alamo-tech"
+    REGION: "us-central-1"
+    UBUNTU_UPDATE_TYPE: "standard"
+    AUTO_REBOOT: "false"
+    DRY_RUN: "false"
+    COMPANY_NAME: "Alamo Tech"
+    DEPLOYMENT_TIER: "enterprise"
+    MONITORING_ENABLED: "true"
+    BACKUP_ENABLED: "true"
     
   tasks:
-    - name: List directory contents to debug
-      shell: ls -la /tmp/semaphore/project_5/repository_3_template_3/
-      register: dir_list
-      
-    - name: Debug directory contents
-      debug:
-        var: dir_list.stdout_lines
-        
-    - name: Check if targets.env exists
-      shell: find /tmp/semaphore/project_5/repository_3_template_3/ -name "targets.env" -type f
-      register: targets_file
-      
-    - name: Debug targets.env location
-      debug:
-        var: targets_file.stdout_lines
-        
-    - name: Load client configuration
-      include_vars: "{{ targets_file.stdout_lines[0] }}"
-      when: targets_file.stdout_lines | length > 0
       
     - name: Display deployment information
       debug:
