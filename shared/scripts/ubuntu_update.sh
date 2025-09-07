@@ -9,6 +9,7 @@ USER="ubuntu"
 UPDATE_TYPE="standard"
 REBOOT_REQUIRED=false
 DRY_RUN=false
+FORCE_UPDATE=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -43,6 +44,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=true
+            shift
+            ;;
+        --force)
+            FORCE_UPDATE=true
             shift
             ;;
         *)
@@ -91,6 +96,7 @@ echo "SSH user: $USER"
 echo "Update type: $UPDATE_TYPE"
 echo "Reboot required: $REBOOT_REQUIRED"
 echo "Dry run: $DRY_RUN"
+echo "Force update: $FORCE_UPDATE"
 echo "=========================================="
 
 # Create outputs directory
@@ -131,13 +137,37 @@ update_ubuntu() {
     echo "=== PRE-UPDATE SYSTEM INFORMATION ===" >> "$log_file"
     execute_ssh "uname -a && lsb_release -a && df -h && free -h" "$log_file" "System information collection"
     
-    # Check for available updates
-    echo "=== CHECKING FOR AVAILABLE UPDATES ===" >> "$log_file"
-    execute_ssh "apt list --upgradable 2>/dev/null | wc -l" "$log_file" "Check available updates count"
-    
-    # Update package lists
+    # Update package lists first
     echo "=== UPDATING PACKAGE LISTS ===" >> "$log_file"
     execute_ssh "apt update" "$log_file" "Update package lists"
+    
+    # Check for available updates
+    echo "=== CHECKING FOR AVAILABLE UPDATES ===" >> "$log_file"
+    local update_count
+    update_count=$(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$USER@$HOST" "apt list --upgradable 2>/dev/null | wc -l")
+    echo "Available updates: $update_count" >> "$log_file"
+    echo "Available updates: $update_count"
+    
+    # Check if updates are needed
+    if [[ "$update_count" -eq 0 ]]; then
+        echo "✅ No updates available. System is up to date!"
+        echo "NO_UPDATES_AVAILABLE=true" >> "$log_file"
+        
+        if [[ "$FORCE_UPDATE" == "true" ]]; then
+            echo "⚠️  Force update enabled - proceeding with update process anyway"
+            echo "FORCE_UPDATE_ENABLED=true" >> "$log_file"
+        else
+            echo "=========================================="
+            echo "Ubuntu update check completed - no updates needed!"
+            echo "Log file: $log_file"
+            echo "=========================================="
+            return 0
+        fi
+    else
+        echo "📦 Found $update_count packages that can be updated"
+        echo "UPDATES_AVAILABLE=true" >> "$log_file"
+        echo "UPDATE_COUNT=$update_count" >> "$log_file"
+    fi
     
     # Perform updates based on type
     case "$UPDATE_TYPE" in

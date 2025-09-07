@@ -15,6 +15,7 @@
     UBUNTU_UPDATE_TYPE: "standard"
     AUTO_REBOOT: "false"
     DRY_RUN: "false"
+    FORCE_UPDATE: "false"
     COMPANY_NAME: "Alamo Tech"
     DEPLOYMENT_TIER: "enterprise"
     MONITORING_ENABLED: "true"
@@ -56,7 +57,8 @@
           --ssh-key "$SEMAPHORE_SECRET_DIR/ssh_key" \
           --host "{{ HOST }}" \
           --user "{{ USER }}" \
-          --update-type "{{ UBUNTU_UPDATE_TYPE | default('standard') }}"
+          --update-type "{{ UBUNTU_UPDATE_TYPE | default('standard') }}" \
+          {% if FORCE_UPDATE | default('false') == 'true' %}--force{% endif %}
       register: update_result
       
     - name: Display update results
