@@ -36,12 +36,8 @@
           - "Backup Enabled: {{ BACKUP_ENABLED }}"
           - "Rollback on Failure: {{ ROLLBACK_ON_FAILURE }}"
           
-    - name: Get current working directory
-      shell: pwd
-      register: current_dir
-      
     - name: Check if Zabbix upgrade script exists
-      shell: ls -la {{ current_dir.stdout }}/shared/scripts/zabbix_upgrade.sh
+      shell: ls -la ../../../../shared/scripts/zabbix_upgrade.sh
       register: script_check
       
     - name: Debug script check
@@ -49,7 +45,7 @@
         var: script_check.stdout_lines
         
     - name: Check script permissions
-      shell: ls -la {{ current_dir.stdout }}/shared/scripts/
+      shell: ls -la ../../../../shared/scripts/
       register: script_perms
       
     - name: Debug script permissions
@@ -58,7 +54,7 @@
         
     - name: Run Zabbix upgrade deployment
       shell: |
-        cd {{ current_dir.stdout }}
+        cd ../../../../..
         chmod +x ./shared/scripts/zabbix_upgrade.sh
         ./shared/scripts/zabbix_upgrade.sh \
           --client "{{ client }}" \
