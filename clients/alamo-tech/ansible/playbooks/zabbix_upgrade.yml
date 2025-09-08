@@ -54,9 +54,9 @@
         
     - name: Run Zabbix upgrade deployment
       shell: |
-        cd ../../../../..
-        chmod +x ./shared/scripts/zabbix_upgrade.sh
-        ./shared/scripts/zabbix_upgrade.sh \
+        cd ../../../..
+        chmod +x shared/scripts/zabbix_upgrade.sh
+        shared/scripts/zabbix_upgrade.sh \
           --client "{{ client }}" \
           --client-dir "{{ client_dir }}" \
           --ssh-key "$SEMAPHORE_SECRET_DIR/ssh_key" \
